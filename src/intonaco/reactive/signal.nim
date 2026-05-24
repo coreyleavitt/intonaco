@@ -34,6 +34,23 @@ type
     val: T
     label*: string
 
+  SignalRead* = object of RootEffect
+    ## A tracked signal read, as a Nim `tags` effect (#49). Declared on
+    ## `get`/`()` so `std/effecttraits` reports transitive reads for the
+    ## compile-time classifier's purity gate, and so consumers can write
+    ## `{.forbids: [SignalRead].}` for a context that must not read reactive
+    ## state. `peek` is deliberately untagged — an untracked read creates
+    ## no dependency.
+
+  SignalWrite* = object of RootEffect
+    ## A signal write, as a Nim `tags` effect (#49). Injected via the pure
+    ## `setRaw` below — NOT declared on `set`, which also journals + notifies
+    ## and so has unbounded effects (a `tags:[X]` upper bound can't hold).
+    ## A declared tag on the pure `setRaw` injects `SignalWrite` into every
+    ## `set` caller, so `{.forbids: [SignalWrite].}` catches mutation (e.g. a
+    ## render path). `forbids` is surgically precise: carrying the RootEffect
+    ## supertype (which `set` does, via `notify`) does NOT trigger it.
+
 # --- Signal -----------------------------------------------------------------
 
 proc signal*[T](initial: T, label = ""): Signal[T] =
@@ -49,7 +66,7 @@ proc signal*[T](initial: T, label = ""): Signal[T] =
   let effective = consumeRestoration(label, initial)
   Signal[T](val: effective, label: label)
 
-proc get*[T](s: Signal[T]): T {.gcsafe.} =
+proc get*[T](s: Signal[T]): T {.gcsafe, tags: [SignalRead].} =
   ## Read the current value. When called inside a `createEffect` /
   ## `createComputed` body, registers a dynamic dependency on `s`.
   ## Use `peek` to read without tracking.
@@ -65,6 +82,14 @@ proc peek*[T](s: Signal[T]): T {.gcsafe.} =
 
 proc `()`*[T](s: Signal[T]): T {.gcsafe.} = s.get()
   ## Sugar — `count()` reads + tracks; same as `count.get()`.
+
+proc setRaw[T](s: Signal[T], v: T) {.gcsafe, raises: [], tags: [SignalWrite].} =
+  ## The raw value mutation, isolated so it can carry the `SignalWrite`
+  ## effect cleanly (a declared tag injects into callers). `setCore` routes
+  ## its store through here, so everything calling `set` transitively carries
+  ## `SignalWrite` — and `{.forbids: [SignalWrite].}` can catch it — even
+  ## though `set` itself also journals and notifies (unbounded effects).
+  s.val = v
 
 proc setCore[T](s: Signal[T], newVal: T, journal: bool)
     {.gcsafe, raises: [].} =
@@ -83,7 +108,7 @@ proc setCore[T](s: Signal[T], newVal: T, journal: bool)
     onSpeculativeRevert proc() =
       captured.val = prior
       notify(captured)
-  s.val = newVal
+  setRaw(s, newVal)
   # Suppress journaling during a time-warp projection: rewindTo
   # re-fires observers, and any effect that writes a derived signal
   # would otherwise append a fresh `ekSignalWrite` mid-rewind,
