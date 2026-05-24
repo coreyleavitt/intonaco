@@ -89,6 +89,12 @@ type
     inQueue*: bool
       ## Set while queued in the propagation worklist, so notify()
       ## enqueues each Computation at most once per drain.
+    heightFixed*: bool
+      ## When set, `height` was baked at compile time (#53) and subscribe-time
+      ## accumulation must NOT change it. A baked height is the over-approximation
+      ## across all branches; runtime accumulation only sees taken branches and
+      ## would under-shoot (re-introducing the glitch). Edges still form for
+      ## dirty-marking; only the height bump is suppressed.
 
 proc len*(o: ObserverList): int {.inline.} = o.items.len
 proc `[]`*(o: ObserverList, i: int): Computation {.inline.} = o.items[i]
@@ -174,7 +180,7 @@ proc subscribe*(s: Subscribable, c: Computation) {.gcsafe.} =
     if c notin s.observers:
       s.observers.add c
       c.sources.add s
-    if s.height + 1 > c.height: c.height = s.height + 1
+    if not c.heightFixed and s.height + 1 > c.height: c.height = s.height + 1
 
 proc trackRead*(s: Subscribable) {.gcsafe.} =
   ## Register the current Computation (if any) as an observer of `s`.
@@ -186,7 +192,8 @@ proc trackRead*(s: Subscribable) {.gcsafe.} =
     if currentComputation notin s.observers:
       s.observers.add currentComputation
       currentComputation.sources.add s
-    if s.height + 1 > currentComputation.height:
+    if not currentComputation.heightFixed and
+       s.height + 1 > currentComputation.height:
       currentComputation.height = s.height + 1
 
 var gPropagating {.threadvar.}: bool

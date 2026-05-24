@@ -23,6 +23,7 @@
 import std/macros
 import ./scope
 import ./subscribable
+import ./height
 export subscribable
 import ./speculative
 import ./restoration
@@ -146,14 +147,21 @@ proc setUntracked*[T](s: Signal[T], newVal: T) {.gcsafe, raises: [].} =
 
 # --- Computations -----------------------------------------------------------
 
-proc createEffect*(body: proc() {.closure.}, kind = ckEffect): Computation
-    {.gcsafe, discardable.} =
+proc createEffect*(body: proc() {.closure.}, kind = ckEffect,
+                   fixedHeight = -1): Computation {.gcsafe, discardable.} =
   ## Run `body` immediately, tracking signal reads; re-run on any
   ## tracked signal's change until the enclosing scope is disposed.
   ## Returns the Computation (discardable) so `createComputed` can read
   ## its height and tag its kind.
+  ##
+  ## `fixedHeight >= 0` bakes the height (#53): the Architecture-B macros pass
+  ## the compile-time-resolved height so subscribe-time accumulation does not
+  ## override it. `-1` (the default / explicit-dynamic path) accumulates.
   {.cast(gcsafe).}:
     let comp = Computation(kind: kind)
+    if fixedHeight >= 0:
+      comp.height = fixedHeight
+      comp.heightFixed = true
     comp.run = proc() =
       if comp.disposed: return
       unsubscribeAll(comp)
@@ -194,22 +202,31 @@ macro signals*(body: untyped): untyped =
       let name = stmt[0]
       let value = stmt[1]
       let labelLit = newLit($name)
-      result.add quote do:
-        let `name` = signal(`value`, label = `labelLit`)
+      # Bake {.height: 0.} on the source binding so a computed reading it can
+      # resolve a static height (#51/#53). Sources are height 0 by definition.
+      result.add nnkLetSection.newTree(nnkIdentDefs.newTree(
+        withHeight(name, 0), newEmptyNode(),
+        newCall(bindSym"signal", value,
+                nnkExprEqExpr.newTree(ident"label", labelLit))))
     else:
       error("signals: arm must be `name = value`; got " &
             stmt.repr, stmt)
 
-proc createComputed*[T](body: proc(): T {.closure.}): Signal[T] {.gcsafe.} =
+proc createComputed*[T](body: proc(): T {.closure.}, fixedHeight = -1): Signal[T]
+    {.gcsafe.} =
   ## A derived signal that re-evaluates when its dependencies change.
   ## Reading the returned signal both yields the current value and
   ## subscribes the current computation to it.
+  ##
+  ## `fixedHeight >= 0` bakes the producing computation's height (#53); the
+  ## output signal then carries that baked height for downstream readers.
   {.cast(gcsafe).}:
     var initial: T
     let outSig = Signal[T](val: initial)
-    let comp = createEffect((proc() = outSig.set(body())), kind = ckComputed)
+    let comp = createEffect((proc() = outSig.set(body())), kind = ckComputed,
+                            fixedHeight = fixedHeight)
     # The output signal carries the producing computation's height, so
-    # downstream readers compute their height relative to it. (Set after
-    # the initial run, when comp.height reflects its sources.)
+    # downstream readers compute their height relative to it. (When baked,
+    # comp.height is the fixed height; otherwise the accumulated one.)
     outSig.height = comp.height
     result = outSig
