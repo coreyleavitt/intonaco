@@ -28,6 +28,7 @@ task test, "run intonaco's standalone tests":
     "tests/test_effect_feedback.nim",
     "tests/test_purity.nim",
     "tests/test_height.nim",
+    "tests/test_classify.nim",
   ]
   for t in tests:
     exec "nim r --hints:off --warnings:off --path:src " & t
