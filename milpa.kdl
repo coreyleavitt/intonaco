@@ -1,0 +1,22 @@
+// intonaco's milpa manifest. Declares the URL deps that nimble v0.22.2
+// can't resolve via its broken SAT solver; milpa fetches them into _deps/
+// and emits nim.cfg with the right --path: lines.
+//
+// fresco gets chronos transitively THROUGH intonaco; standalone, intonaco
+// declares the chronos fork directly so the substrate is testable on its
+// own (it must not depend on a consumer to be validated). chronos's own
+// transitive deps (results, stew, bearssl, httputils, unittest2) resolve
+// through chronos.nimble.
+//
+// See ../milpa for the resolver and ../fresco/docs/rfc-intonaco-fresco-
+// split.md for the architectural framing.
+
+deps {
+    // Async runtime: our chronos fork with the contextVar primitive that
+    // currentScope / currentSpeculative / parallelCollector ride on.
+    // Pinned to the feat/contextvars branch while the upstream PR is in
+    // review; milpa locks the resolved SHA in milpa.lock.
+    chronos git=(url)"https://github.com/coreyleavitt/chronos.git" ref="feat/contextvars"
+}
+
+kind "library"

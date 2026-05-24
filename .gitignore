@@ -1,0 +1,7 @@
+# milpa-managed dependency artifacts (library kind — not vendored).
+# Run `milpa fetch` after cloning to repopulate.
+_deps/
+nim.cfg
+milpa.lock
+.docker-home/
+nimcache/
