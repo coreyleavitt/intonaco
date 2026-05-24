@@ -58,11 +58,22 @@ type
     pendingVals: seq[Computation]
     pendingIsAdd: seq[bool]
 
+  ComputationKind* = enum
+    ## ckComputed: a derivation whose write to its own output signal is
+    ## value production. ckEffect: a leaf side-effect. (Deferred-write
+    ## semantics for ckEffect are a later step; the spike runs both in
+    ## one height-ordered drain.)
+    ckEffect, ckComputed
+
   Subscribable* = ref object of RootObj
     ## Erased base for "anything observable" so a Computation can
     ## hold a heterogeneous list of sources without generic infection.
     ## All reactive primitives in fresco inherit from this.
     observers*: ObserverList
+    height*: int
+      ## Longest path from a source. Plain source signal = 0; a
+      ## computed's output signal carries the producing Computation's
+      ## height, so dependents compute their own height relative to it.
 
   Computation* = ref object
     ## The observer side of the reactive graph. Holds a closure to
@@ -71,6 +82,13 @@ type
     run*: proc() {.closure.}
     sources*: seq[Subscribable]
     disposed*: bool
+    kind*: ComputationKind
+    height*: int
+      ## 1 + max(height of sources), accumulated at subscribe time
+      ## (monotone non-decreasing). Drives height-ordered propagation.
+    inQueue*: bool
+      ## Set while queued in the propagation worklist, so notify()
+      ## enqueues each Computation at most once per drain.
 
 proc len*(o: ObserverList): int {.inline.} = o.items.len
 proc `[]`*(o: ObserverList, i: int): Computation {.inline.} = o.items[i]
@@ -156,6 +174,7 @@ proc subscribe*(s: Subscribable, c: Computation) {.gcsafe.} =
     if c notin s.observers:
       s.observers.add c
       c.sources.add s
+    if s.height + 1 > c.height: c.height = s.height + 1
 
 proc trackRead*(s: Subscribable) {.gcsafe.} =
   ## Register the current Computation (if any) as an observer of `s`.
@@ -167,21 +186,45 @@ proc trackRead*(s: Subscribable) {.gcsafe.} =
     if currentComputation notin s.observers:
       s.observers.add currentComputation
       currentComputation.sources.add s
+    if s.height + 1 > currentComputation.height:
+      currentComputation.height = s.height + 1
+
+var gPropagating {.threadvar.}: bool
+var gQueue {.threadvar.}: seq[Computation]
+  ## Height-ordered propagation worklist (dispatcher-local; the single-
+  ## dispatcher invariant makes a threadvar correct). Spike uses a
+  ## linear min-height scan — fine for the small graphs under test; the
+  ## production form is a bucketed-by-height array (see RFC "Nim leverage").
 
 proc notify*(s: Subscribable) {.gcsafe, raises: [].} =
-  ## Fire every Computation observing `s` in subscription order.
-  ## A re-run may subscribe/unsubscribe against `s` (an effect that
-  ## resubscribes to different sources, or disposes itself) — those
-  ## structural mutations are queued and applied when the outermost
-  ## iteration exits, so the current pass yields exactly the set of
-  ## observers that existed at entry. A raising observer is
-  ## swallowed: `c.run` is a user closure, and a faulty observer
-  ## shouldn't break sibling observers or the writing task.
+  ## Enqueue every Computation observing `s` into the height-ordered
+  ## worklist; if no propagation is in flight, drain it. A nested write
+  ## during a drained `run()` enqueues (because `gPropagating` is set)
+  ## instead of recursing — this is what makes propagation glitch-free:
+  ## a node only fires after every lower-height dependency has settled.
+  ## A raising observer is swallowed (a faulty observer must not break
+  ## siblings or the writing task).
   {.cast(gcsafe).}:
     s.observers.iterRO c:
-      if not c.disposed:
-        try: c.run()
-        except Exception: discard
+      if not c.disposed and not c.inQueue:
+        c.inQueue = true
+        gQueue.add c
+    if gPropagating: return
+    gPropagating = true
+    try:
+      while gQueue.len > 0:
+        # Extract the minimum-height still-queued Computation.
+        var mi = 0
+        for i in 1 ..< gQueue.len:
+          if gQueue[i].height < gQueue[mi].height: mi = i
+        let c = gQueue[mi]
+        gQueue.del(mi)          # swap-remove; order irrelevant (we min-scan)
+        c.inQueue = false
+        if not c.disposed:
+          try: c.run()
+          except Exception: discard
+    finally:
+      gPropagating = false
 
 proc unsubscribeAll*(c: Computation) {.gcsafe.} =
   ## Detach `c` from every Subscribable it currently observes. Called

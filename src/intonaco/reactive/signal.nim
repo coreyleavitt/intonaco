@@ -115,11 +115,14 @@ proc setUntracked*[T](s: Signal[T], newVal: T) {.gcsafe, raises: [].} =
 
 # --- Computations -----------------------------------------------------------
 
-proc createEffect*(body: proc() {.closure.}) {.gcsafe.} =
+proc createEffect*(body: proc() {.closure.}, kind = ckEffect): Computation
+    {.gcsafe, discardable.} =
   ## Run `body` immediately, tracking signal reads; re-run on any
   ## tracked signal's change until the enclosing scope is disposed.
+  ## Returns the Computation (discardable) so `createComputed` can read
+  ## its height and tag its kind.
   {.cast(gcsafe).}:
-    let comp = Computation()
+    let comp = Computation(kind: kind)
     comp.run = proc() =
       if comp.disposed: return
       unsubscribeAll(comp)
@@ -134,6 +137,7 @@ proc createEffect*(body: proc() {.closure.}) {.gcsafe.} =
         comp.disposed = true
         unsubscribeAll(comp)
     comp.run()
+    result = comp
 
 template `:=`*[T](s: Signal[T], v: T): untyped =
   ## DSL sugar for signal writes: `count := 5` ≡ `count.set(5)`.
@@ -172,6 +176,9 @@ proc createComputed*[T](body: proc(): T {.closure.}): Signal[T] {.gcsafe.} =
   {.cast(gcsafe).}:
     var initial: T
     let outSig = Signal[T](val: initial)
-    createEffect proc() =
-      outSig.set(body())
+    let comp = createEffect((proc() = outSig.set(body())), kind = ckComputed)
+    # The output signal carries the producing computation's height, so
+    # downstream readers compute their height relative to it. (Set after
+    # the initial run, when comp.height reflects its sources.)
+    outSig.height = comp.height
     result = outSig
