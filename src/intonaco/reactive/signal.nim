@@ -116,7 +116,13 @@ proc setCore[T](s: Signal[T], newVal: T, journal: bool)
   # cascade computes consistently — only the journal write is
   # skipped. See `journal/log.rewindingFlag` for the contract.
   if journal and not isRewinding():
-    {.cast(gcsafe).}:
+    # Effect firewall (cast(tags:[])): journaling is internal substrate
+    # bookkeeping (TimeEffect + the journal's RootEffect), not a *reactive*
+    # effect of the writing code. Stripping it — together with the observer
+    # firewall in notify — leaves `set` carrying only SignalWrite, so a bare
+    # `RootEffect` in a body's tags cleanly means "the compiler punted"
+    # (opacity), never "this wrote a signal." Runtime unchanged.
+    {.cast(gcsafe), cast(tags: []).}:
       let valRepr =
         when compiles($newVal): $newVal
         else: ""

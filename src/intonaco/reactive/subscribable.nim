@@ -221,7 +221,15 @@ proc notify*(s: Subscribable) {.gcsafe, raises: [].} =
         gQueue.del(mi)          # swap-remove; order irrelevant (we min-scan)
         c.inQueue = false
         if not c.disposed:
-          try: c.run()
+          # Effect firewall: an observer's effects are fired BY THE SCHEDULER,
+          # not by the code that wrote the signal, so they must not leak into
+          # the writer's inferred `tags`. Without this every `set` caller
+          # inherits the catch-all `RootEffect` (observers do arbitrary things),
+          # defeating `RootEffect`-as-opacity-signal in the classifier.
+          # cast(tags:[]) strips it; runtime is unchanged. See reactive/purity.
+          try:
+            {.cast(tags: []).}:
+              c.run()
           except Exception: discard
     finally:
       gPropagating = false
