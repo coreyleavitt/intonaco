@@ -11,6 +11,8 @@
 // See ../milpa for the resolver and ../fresco/docs/rfc-intonaco-fresco-
 // split.md for the architectural framing.
 
+name "intonaco"
+
 deps {
     // Async runtime: our chronos fork with the contextVar primitive that
     // currentScope / currentSpeculative / parallelCollector ride on.
