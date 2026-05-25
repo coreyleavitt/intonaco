@@ -146,8 +146,12 @@ proc onDelta*[T](c: ReactiveCollection[T], handler: DeltaHandler[T]) =
   ## eagerly inside the mutation. Lifetime-bound to the current scope.
   let dc = DeltaConsumer[T](comp: Computation(kind: ckEffect))
   dc.comp.run = proc() =
-    let batch = dc.pending
-    dc.pending = @[]
+    # `swap` (move, not copy) the pending buffer out — a plain `let batch =
+    # dc.pending` COPY corrupts a recursive `Delta` variant (`dkRollback`'s
+    # `rollbackOps: seq[Delta]`) under ORC. Snapshot-then-drain so a reentrant
+    # mutation's deltas land in the fresh `dc.pending` for the next fire.
+    var batch: seq[Delta[T]]
+    swap(batch, dc.pending)
     for d in batch:
       try: handler(d)
       except Exception: discard

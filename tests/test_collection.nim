@@ -103,7 +103,7 @@ suite "CollectionSignal: speculative rollback":
       c.push(4); c.setAt(0, 99); commit()
     check c.get() == @[99, 2, 3, 4]
 
-  test "M mutations + rollback fire ONE batched dkRollback":
+  test "M mutations + rollback fire ONE batched dkRollback with the right inverses":
     let c = collection(@[10, 20, 30])
     var deltas: seq[Delta[int]] = @[]
     discard createRoot:
@@ -112,4 +112,9 @@ suite "CollectionSignal: speculative rollback":
       c.push(40); c.setAt(0, 99); discard c.pop()
     check deltas[^1].kind == dkRollback
     check deltas[^1].rollbackOps.len == 3
+    # The DELIVERED inverse kinds must survive the height-scheduled buffer (a
+    # plain seq COPY of the recursive Delta variant zeroed them under ORC):
+    check deltas[^1].rollbackOps[0].kind == dkRemove   # inverse-of-push
+    check deltas[^1].rollbackOps[1].kind == dkUpdate   # inverse-of-setAt
+    check deltas[^1].rollbackOps[2].kind == dkInsert   # inverse-of-pop
     check c.get() == @[10, 20, 30]
