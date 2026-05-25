@@ -1,0 +1,25 @@
+# Lean 4 toolchain for the intonaco mechanized-proof artifact (intonaco#56).
+# Separate from the Nim dev image — this checks the Lean proofs, not code.
+# Built/run with podman; openSUSE Tumbleweed base (matches fresco-dev).
+#
+#   podman build --network host -t intonaco-proof -f proofs/Containerfile proofs
+#   podman run --rm -v "$PWD/proofs:/workspace:Z" -v intonaco-lean:/cache \
+#     -e HOME=/cache -w /workspace intonaco-proof lean Consistency.lean
+#
+# Rootless podman maps container-root -> the host user, so we run as root
+# inside (no --user) and mounted writes come out host-owned.
+FROM opensuse/tumbleweed
+
+RUN zypper --non-interactive refresh && \
+    zypper --non-interactive install --no-recommends \
+      curl git tar gzip gawk gcc-c++ glibc-locale && \
+    zypper clean --all
+
+# elan (Lean's toolchain manager), installed system-wide with the stable Lean.
+ENV ELAN_HOME=/opt/elan
+ENV PATH=/opt/elan/bin:$PATH
+RUN curl -sSfL https://elan.lean-lang.org/elan-init.sh \
+      | sh -s -- -y --default-toolchain stable --no-modify-path && \
+    lean --version
+
+WORKDIR /workspace
