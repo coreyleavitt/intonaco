@@ -14,58 +14,9 @@
 {.experimental: "callOperator".}
 
 import std/[macros, options]
-import ./subscribable
-import ./collection
-import ./signal
+import ./deltafloor   # deltas / foldDeltas — named by bindSym, not re-exported
 import ./height
 import ./classify
-
-type
-  DeltaStream*[T] = ref object of Subscribable
-    ## `c`'s event face — carries the deltas pending for the current
-    ## propagation. Height equals `c`'s, so a `scan` over it composes a
-    ## normal `c.height + 1`.
-    pending: seq[Delta[T]]
-
-proc deltas*[T](c: CollectionSignal[T]): DeltaStream[T] =
-  ## Obtain `c`'s delta stream. Each mutation pushes its typed delta onto the
-  ## stream and schedules the stream's observers through the height-ordered
-  ## scheduler.
-  let s = DeltaStream[T]()
-  s.height = Subscribable(c).height
-  c.onDelta proc(d: Delta[T]) =
-    s.pending.add d
-    notify(Subscribable(s))
-  s
-
-proc foldDeltas*[T, S](s: DeltaStream[T], initial: S,
-                 step: proc(acc: S, d: Delta[T]): S {.closure.},
-                 fixedHeight = -1): Signal[S] =
-  ## The runtime floor under the `scan` macro — value-constructed, unclassified
-  ## (the step is an opaque closure). Folds the stream's deltas into derived
-  ## state: `step(acc, delta)` runs once per delta, in height order; the result
-  ## is exposed as a derived `Signal[S]`. Prefer the `scan` macro, which
-  ## classifies the step and bakes a compile-time height.
-  ##
-  ## `fixedHeight >= 0` bakes the scheduling height (the `scan` macro passes the
-  ## classified `max(collection, step-reads) + 1`), so the node fires after a
-  ## higher-height signal its step reads — subscribe-time accumulation would only
-  ## see the collection dependency and under-shoot, re-introducing a glitch.
-  let outSig = signal(initial)
-  var state = initial
-  let comp = Computation(kind: ckEffect)
-  if fixedHeight >= 0:
-    comp.height = fixedHeight
-    comp.heightFixed = true
-    outSig.height = fixedHeight
-  comp.run = proc() =
-    if comp.disposed: return
-    for d in s.pending:
-      state = step(state, d)
-    s.pending.setLen(0)   # consumed for this propagation
-    outSig.set(state)
-  subscribe(Subscribable(s), comp)
-  outSig
 
 macro scan*(name: untyped, coll: typed, initial: typed, step: typed): untyped =
   ## Declare a static, height-baked fold over a collection's delta stream — the

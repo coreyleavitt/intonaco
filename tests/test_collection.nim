@@ -10,6 +10,7 @@ import intonaco/reactive/scope
 import intonaco/reactive/signal
 import intonaco/reactive/runtime        # createEffect (the floor — tests may use it)
 import intonaco/reactive/collection
+import intonaco/reactive/deltafloor      # onDelta (the floor — tests subscribe directly)
 import intonaco/reactive/speculative
 
 suite "CollectionSignal: core delta emission":

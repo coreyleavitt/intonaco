@@ -33,7 +33,6 @@
 
 import std/macros
 import ./subscribable
-import ./scope
 import ./speculative
 import ./height
 import intonaco/journal/events
@@ -69,15 +68,20 @@ type
 
   DeltaHandler*[T] = proc(d: Delta[T]) {.closure.}
 
-  DeltaConsumer[T] = ref object
+  DeltaConsumer*[T] = ref object
     ## A height-scheduled delta sink. `comp` is subscribed to the collection
     ## (so it carries a height and fires through the worklist, NOT eagerly);
     ## `pending` buffers the deltas of the current propagation until `comp`
     ## fires at its height and drains them. This is what keeps a derived node
     ## reading the collection glitch-free in a diamond — the eager fanout it
     ## replaces would fire consumers before the collection's siblings settled.
-    comp: Computation
-    pending: seq[Delta[T]]
+    ##
+    ## Exported (with its fields) only so the `deltafloor` module can construct
+    ## and attach one in `onDelta`; the delivery half (`deliver`) lives here with
+    ## the type. A field can't form a reactive edge, so this is not a strict-mode
+    ## escape — the edge-forming `onDelta` is what `deltafloor` gates.
+    comp*: Computation
+    pending*: seq[Delta[T]]
 
   RollbackBufferEntry[T] = ref object
     ## Per-collection per-scope buffer of captured inverses, chained
@@ -94,7 +98,9 @@ type
     ## `pushDelta`). Read through `get`/`len`/`onDelta` — direct `.items`
     ## access would bypass dependency tracking.
     items: seq[T]
-    deltaConsumers: seq[DeltaConsumer[T]]
+    deltaConsumers*: seq[DeltaConsumer[T]]
+      ## Exported only for `deltafloor.onDelta` to attach a consumer; touched
+      ## otherwise solely by `deliver` here. Not a reactive edge itself.
 
   CollectionSignal*[T] = ref object of ReactiveCollection[T]
     label*: string
@@ -136,35 +142,6 @@ macro collections*(body: untyped): untyped =
     else:
       error("collections: arm must be `name = value`; got " &
             stmt.repr, stmt)
-
-# --- Subscription --------------------------------------------------------
-
-proc onDelta*[T](c: ReactiveCollection[T], handler: DeltaHandler[T]) =
-  ## Register `handler` to receive every delta — height-scheduled. The handler
-  ## fires through the worklist at the consumer's height (`c.height + 1`), after
-  ## every lower-height dependency of the same propagation has settled, NOT
-  ## eagerly inside the mutation. Lifetime-bound to the current scope.
-  let dc = DeltaConsumer[T](comp: Computation(kind: ckEffect))
-  dc.comp.run = proc() =
-    # `swap` (move, not copy) the pending buffer out — a plain `let batch =
-    # dc.pending` COPY corrupts a recursive `Delta` variant (`dkRollback`'s
-    # `rollbackOps: seq[Delta]`) under ORC. Snapshot-then-drain so a reentrant
-    # mutation's deltas land in the fresh `dc.pending` for the next fire.
-    var batch: seq[Delta[T]]
-    swap(batch, dc.pending)
-    for d in batch:
-      try: handler(d)
-      except Exception: discard
-        # A faulty delta handler must not break siblings or the writing task.
-  subscribe(Subscribable(c), dc.comp)   # in c.observers, height = c.height + 1
-  c.deltaConsumers.add dc
-  let captured = c
-  let cdc = dc
-  onCleanup proc() =
-    cdc.comp.disposed = true
-    let idx = captured.deltaConsumers.find(cdc)
-    if idx >= 0: captured.deltaConsumers.del idx
-    unsubscribeAll(cdc.comp)
 
 proc opRepr[T](d: Delta[T]): string =
   ## Compact one-token repr of a non-rollback delta for the journal

@@ -9,6 +9,7 @@
 
 import std/[unittest, macros, options]
 import intonaco/reactive/collection
+import intonaco/reactive/deltafloor    # deltas / foldDeltas (the floor — tests fold directly)
 import intonaco/reactive/signal
 import intonaco/reactive/construct
 import intonaco/reactive/dynamic
