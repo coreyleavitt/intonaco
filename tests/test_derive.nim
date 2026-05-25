@@ -87,11 +87,16 @@ let pc = collection(@[1, 2, 3])
 signals:
   theme = 10
 
-suite "derive macro — the map must be pure":
-  test "7. an impure map (reads a signal) is a compile error":
-    # A delta-only-maintained value can't track an external signal — the macro
-    # must reject reactive reads inside `f`.
-    check not compiles(derive(badp, pc, proc(x: int): int = x * theme()))
+proc viaHelper(x: int): int = x * theme()   # a NAMED proc that reads a signal
+
+suite "derive macro — the map must be pure (a linear operator)":
+  test "7. an impure map is a compile error — directly, AND through a helper":
+    # `derive` is a linear `map`; a signal-dependent map is bilinear (a join),
+    # out of scope — use a `computed` / the render layer. The guard must catch
+    # the read transitively, not just in the lambda body.
+    check not compiles(derive(badp, pc, proc(x: int): int = x * theme()))  # direct
+    check not compiles(derive(badv, pc, proc(x: int): int = viaHelper(x)))  # helper, in a lambda
+    check not compiles(derive(badt, pc, viaHelper))                         # helper passed as f
     # the pure form compiles
     check compiles(derive(okp, pc, proc(x: int): int = x * 2))
 

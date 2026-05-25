@@ -28,8 +28,12 @@ proc mapDelta[T, U](d: Delta[T], f: proc(x: T): U {.closure.}): Delta[U] =
   of dkClear:   Delta[U](kind: dkClear)
   of dkReplace: Delta[U](kind: dkReplace, replaceVal: d.replaceVal.map(f))
   of dkRollback:
-    Delta[U](kind: dkRollback,
-             rollbackOps: d.rollbackOps.map(proc(x: Delta[T]): Delta[U] = mapDelta(x, f)))
+    # Unreachable: `mapped` recomputes the view from the (already-reverted)
+    # source on rollback — that recompute IS the oracle value — and never routes
+    # a rollback through `mapDelta`. The 5 forward kinds above map incrementally
+    # (the linear IVM rule); rollback is the one structural case handled by
+    # recompute, so there's no inverse-mapping path to get subtly wrong.
+    raise newException(Defect, "mapDelta: dkRollback is handled by recompute, not mapped")
 
 proc mapped*[T, U](c: ReactiveCollection[T], f: proc(x: T): U {.closure.},
                    fixedHeight = -1): ReactiveCollection[U] =
@@ -70,14 +74,23 @@ macro derive*(name: untyped, coll: typed, f: typed): untyped =
   ## (a `CollectionSignal` is height 0 by construction), composed, and baked
   ## onto `name` so the node is in the static fragment and downstream `derive`s
   ## compose through it.
-  # The map must be PURE — a delta-only-maintained value can't track an external
-  # signal (a signal change with no delta would leave it stale). Reject reactive
-  # reads inside `f`.
-  let fBody = if f.kind in {nnkLambda, nnkProcDef, nnkFuncDef}: f.body else: f
+  # The map must be PURE. `derive` is a LINEAR operator (`map(f)(c ⊕ δ) =
+  # map(f)(c) ⊕ map(f)(δ)`), which is what makes incremental == apply-to-delta
+  # sound. A signal-dependent map is BILINEAR (a collection×signal join) — out
+  # of scope; express it as a `computed` (`c.get().map(...)`) or at the render
+  # layer. Classify the map's BODY — for a named proc, via `getImpl` — so the
+  # check catches reactive reads TRANSITIVELY (through helper procs), not just
+  # in an inline lambda.
+  let fBody =
+    if f.kind in {nnkLambda, nnkProcDef, nnkFuncDef}: f.body
+    elif f.kind == nnkSym and f.getImpl.kind in {nnkProcDef, nnkFuncDef}: f.getImpl.body
+    else: f
   let cls = classify(fBody)
   if cls.tier == tDynamic or (cls.tier == tStatic and cls.height > 0):
-    error("derive: the map reads reactive state — it must be a pure function of " &
-          "the element. Read signals/collections outside the map (or use `scan`).", f)
+    error("derive: the map reads reactive state — `derive` is a linear (pure) " &
+          "map. For a signal-dependent map use a `computed` (`c.get().map(...)`) " &
+          "or apply it at the render layer; a collection×signal map is a join, " &
+          "deliberately out of scope.", f)
   let h = sourceHeight(coll) + 1
   let ctor = newCall(bindSym"mapped", coll, f,
     nnkExprEqExpr.newTree(ident"fixedHeight", newLit(h)))
