@@ -4,16 +4,24 @@
 ## `dynamic` classify at construction, bake static heights, fall to the runtime
 ## floor (with a warning / strict error) otherwise.
 
-import std/[unittest, macros, options]
+import std/[unittest, macros, options, strutils]
 import intonaco/reactive/signal
 import intonaco/reactive/height
 import intonaco/reactive/classify
 import intonaco/reactive/construct
+import intonaco/verification
 
 # --- harness ----------------------------------------------------------------
 macro heightLit(sym: typed): int =
   let r = heightOf(sym)
   newLit(if r.isSome: r.get else: -1)
+
+# reify: the # of internal-vocabulary leaks in the diagnostic a body would emit
+macro leakCount(body: typed): int =
+  let action = archBAction(classify(body), false, false)
+  newLit(validate(toDiagnostic(action, "x", SourceSite())).len)
+
+let unbaked = signal(7, label = "unbaked")   # NO {.height.} -> drUnscheduledDep
 
 # --- fixtures ----------------------------------------------------------------
 let a {.height: 0.} = signal(1, label = "a")
@@ -59,14 +67,14 @@ suite "archBAction policy (pure decision)":
     check r.kind == abBakeStatic
     check r.height == 3
   test "2b. DYNAMIC, non-strict -> floor + warn":
-    let r = archBAction(Classification(tier: tDynamic, reason: "x"), false, false)
+    let r = archBAction(Classification(tier: tDynamic, reason: DynReason(kind: drRuntimeKeyed)), false, false)
     check r.kind == abFloor
     check r.warn
   test "2c. DYNAMIC, strict -> error":
-    let r = archBAction(Classification(tier: tDynamic, reason: "x"), false, true)
+    let r = archBAction(Classification(tier: tDynamic, reason: DynReason(kind: drRuntimeKeyed)), false, true)
     check r.kind == abError
   test "2d. escape hatch -> floor, silent":
-    let r = archBAction(Classification(tier: tDynamic, reason: "x"), true, false)
+    let r = archBAction(Classification(tier: tDynamic, reason: DynReason(kind: drRuntimeKeyed)), true, false)
     check r.kind == abFloor
     check not r.warn
   test "2e. escape hatch overrides STATIC -> floor, silent":
@@ -116,3 +124,22 @@ suite "glitch cross-check (baked heights drive the scheduler)":
   test "4b. baked over-approx height drives the runtime (accumulation gives 2)":
     check heightLit(v4) == 3     # compile-time over-approx (both arms)
     check v4.height == 3         # runtime computation height == the baked height
+
+suite "contract adoption (#59): emit through the Diagnostic contract":
+  test "9. floor verdict -> sevNote, validate-clean, render carries consequence + fix + subject":
+    let d = toDiagnostic(
+      ArchBAction(kind: abFloor, reason: DynReason(kind: drRuntimeKeyed), warn: true),
+      "total", SourceSite())
+    check d.severity == sevNote
+    check validate(d).len == 0
+    check "half-updated" in render(d)   # the gtRuntimeScheduled consequence
+    check "dynamic:" in render(d)        # the fix
+    check "total" in render(d)           # the subject prefix
+  test "10. error verdict -> sevError; static -> sevSilent":
+    check toDiagnostic(ArchBAction(kind: abError,
+      errReason: DynReason(kind: drUnscheduledDep)), "x", SourceSite()).severity == sevError
+    check toDiagnostic(ArchBAction(kind: abBakeStatic, height: 2),
+      "x", SourceSite()).severity == sevSilent
+  test "11. every dynamic reason maps to a validate-clean diagnostic (no internal leaks)":
+    check leakCount(sigs[idx()]()) == 0   # drRuntimeKeyed
+    check leakCount(unbaked()) == 0       # drUnscheduledDep — formerly leaked `height`

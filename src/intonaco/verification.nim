@@ -14,7 +14,7 @@
 ##   - A structural (error) root pauses the downstream checks it invalidates,
 ##     rather than emitting a cascade of derived noise (`group`).
 
-import std/[options, strutils]
+import std/[options, strutils, macros]
 
 type
   Severity* = enum
@@ -108,9 +108,18 @@ proc surfaced*(diags: seq[Diagnostic]): seq[Diagnostic] =
     if d.pausedBy.isNone: result.add d
 
 proc render*(d: Diagnostic): string =
-  ## The substrate-baseline message: the consequence, the symptom, and the fix.
-  ## Richer renderings (a terminal panel, a web overlay, a sinopia trace) are a
-  ## frontend's job — they consume the `Diagnostic`, not this string.
-  result = glossary(d.rule)
+  ## The substrate-baseline message: the subject (if named), the consequence,
+  ## the symptom, and the fix. Richer renderings (a terminal panel, a web
+  ## overlay, a sinopia trace) are a frontend's job — they consume the
+  ## `Diagnostic`, not this string.
+  let subj = string(d.subject)
+  if subj.len > 0: result = "`" & subj & "`: "
+  result &= glossary(d.rule)
   if d.symptom.len > 0: result &= " — " & d.symptom
   if d.fix.len > 0: result &= ". Fix: " & d.fix
+
+proc siteOf*(n: NimNode): SourceSite {.compileTime.} =
+  ## Build a `SourceSite` from a node's line info — the convenience a compile-
+  ## time checker uses to locate the diagnostic at the offending source.
+  let li = n.lineInfoObj
+  SourceSite(file: li.filename, line: li.line, col: li.column)

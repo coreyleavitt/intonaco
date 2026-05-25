@@ -19,6 +19,7 @@ import std/[macros, options]
 import ./signal
 import ./classify
 import ./height
+import ../verification
 
 type
   ArchBActionKind* = enum abBakeStatic, abFloor, abError
@@ -27,18 +28,19 @@ type
     ## the macro's emission (bake / warn / error) so soundness is unit-testable.
     case kind*: ArchBActionKind
     of abBakeStatic:
-      height*: int             ## STATIC: bake this height
+      height*: int               ## STATIC: bake this height
     of abFloor:
-      reason*: string          ## runtime floor
-      warn*: bool              ## emit a consequence-tier warning
+      reason*: DynReason         ## runtime floor — the structured why
+      warn*: bool                ## emit a consequence-tier warning
     of abError:
-      errReason*: string       ## strict-mode hard error
+      errReason*: DynReason      ## strict-mode hard error — the structured why
 
 proc archBAction*(c: Classification, escapeHatch, strict: bool): ArchBAction =
   ## STATIC -> bake. DYNAMIC -> floor+warn, or a hard error under strict. The
   ## escape hatch (`dynamic:`) forces a silent floor regardless of the verdict.
   if escapeHatch:
-    return ArchBAction(kind: abFloor, reason: "explicit dynamic:", warn: false)
+    return ArchBAction(kind: abFloor, reason: DynReason(kind: drExplicit),
+                       warn: false)
   case c.tier
   of tStatic:
     ArchBAction(kind: abBakeStatic, height: c.height)
@@ -46,20 +48,52 @@ proc archBAction*(c: Classification, escapeHatch, strict: bool): ArchBAction =
     if strict: ArchBAction(kind: abError, errReason: c.reason)
     else: ArchBAction(kind: abFloor, reason: c.reason, warn: true)
 
-proc floorMsg(subject, reason: string): string {.compileTime.} =
-  subject & " can't be scheduled at compile time, so it falls to the runtime " &
-  "scheduler — " & reason & ". Restructure the read, or wrap it in `dynamic:`."
+proc dynReasonSymptom(r: DynReason): string =
+  ## The developer-facing symptom for each dynamic reason — the SINGLE place
+  ## this prose lives, so it can be audited against `verification`'s internal-
+  ## vocabulary rule (the emit sites self-apply `validate`). No `height`/`tier`/
+  ## etc. — only consequences, in the developer's own vocabulary.
+  case r.kind
+  of drRuntimeKeyed:   "it reads a signal chosen at runtime"
+  of drHiddenRead:     "it reads a signal through `" & r.callee &
+                       "`, whose reads can't be seen here"
+  of drOpaque:         "it calls `" & r.callee & "`, which the compiler can't see into"
+  of drForeign:        "it calls the foreign binding `" & r.callee &
+                       "`, which could read a signal through a callback"
+  of drUnscheduledDep: "it depends on a value that isn't resolved at compile time"
+  of drExplicit:       "it is explicitly marked `dynamic:`"
 
-proc strictMsg(subject, reason: string): string {.compileTime.} =
-  subject & " can't be scheduled at compile time (-d:intonacoStrict) — " &
-  reason & ". Restructure the read, or wrap it in `dynamic:`."
+proc toDiagnostic*(action: ArchBAction, subject: string, site: SourceSite):
+    Diagnostic =
+  ## Map the construction verdict to the shared Diagnostic contract (#55) — so
+  ## the consistency checker emits THROUGH the contract (one message path,
+  ## developer-vocabulary enforced by `validate`), not bespoke strings.
+  let fix = "restructure the read, or wrap it in `dynamic:`"
+  case action.kind
+  of abBakeStatic:
+    Diagnostic(id: DiagnosticId(0), severity: sevSilent, rule: gtRuntimeScheduled,
+      subject: SignalId(subject), symptom: "it is scheduled at compile time",
+      fix: "", site: site)
+  of abFloor:
+    Diagnostic(id: DiagnosticId(0),
+      severity: (if action.warn: sevNote else: sevSilent),
+      rule: gtRuntimeScheduled, subject: SignalId(subject),
+      symptom: dynReasonSymptom(action.reason), fix: fix, site: site)
+  of abError:
+    Diagnostic(id: DiagnosticId(0), severity: sevError, rule: gtRuntimeScheduled,
+      subject: SignalId(subject), symptom: dynReasonSymptom(action.errReason),
+      fix: fix, site: site)
 
 proc emitComputed(name, body: NimNode, escapeHatch: bool): NimNode {.compileTime.} =
   ## Shared construction for `computed` / `dynamic`. Classifies, applies the
   ## Architecture-B policy, and emits the binding: STATIC bakes the height onto
   ## `name`; the floor leaves it unbaked (runtime accumulates) with an optional
-  ## warning; strict turns a dynamic node into a hard error.
+  ## warning (emitted THROUGH the Diagnostic contract); strict turns a dynamic
+  ## node into a hard error.
   let action = archBAction(classify(body), escapeHatch, defined(intonacoStrict))
+  let d = toDiagnostic(action, name.repr, siteOf(body))
+  doAssert validate(d).len == 0,
+    "consistency diagnostic leaks internal vocabulary: " & $validate(d)
   let T = body.getTypeInst
   let lam = newProc(newEmptyNode(), @[T], body, nnkLambda)
   case action.kind
@@ -72,10 +106,10 @@ proc emitComputed(name, body: NimNode, escapeHatch: bool): NimNode {.compileTime
       withHeight(name, action.height), newEmptyNode(), ctor))
   of abFloor:
     let ctor = newCall(bindSym"createComputed", lam)
-    if action.warn: warning(floorMsg("`" & name.repr & "`", action.reason), body)
+    if action.warn: warning(render(d), body)
     nnkLetSection.newTree(nnkIdentDefs.newTree(name, newEmptyNode(), ctor))
   of abError:
-    error(strictMsg("`" & name.repr & "`", action.errReason), body)
+    error(render(d), body)
     nil
 
 macro computed*(name: untyped, body: typed): untyped =
@@ -96,16 +130,19 @@ proc emitEffect(body: NimNode, escapeHatch: bool): NimNode {.compileTime.} =
   ## no binding to bake a pragma onto (nothing reads an effect) — the resolved
   ## height only fixes the effect's own scheduling order relative to its deps.
   let action = archBAction(classify(body), escapeHatch, defined(intonacoStrict))
+  let d = toDiagnostic(action, "", siteOf(body))   # effects have no binding name
+  doAssert validate(d).len == 0,
+    "consistency diagnostic leaks internal vocabulary: " & $validate(d)
   let lam = newProc(newEmptyNode(), @[newEmptyNode()], body, nnkLambda)
   case action.kind
   of abBakeStatic:
     newCall(bindSym"createEffect", lam,
       nnkExprEqExpr.newTree(ident"fixedHeight", newLit(action.height)))
   of abFloor:
-    if action.warn: warning(floorMsg("this effect", action.reason), body)
+    if action.warn: warning(render(d), body)
     newCall(bindSym"createEffect", lam)
   of abError:
-    error(strictMsg("this effect", action.errReason), body)
+    error(render(d), body)
     nil
 
 macro effect*(body: typed): untyped =
