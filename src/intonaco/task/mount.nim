@@ -14,7 +14,7 @@
 
 import chronos/contextvars
 import intonaco/reactive/scope
-import intonaco/reactive/signal
+import intonaco/reactive/runtime   # createEffect (the internal floor)
 import ./core
 
 template mountWhen*(cond: untyped, body: untyped): untyped =

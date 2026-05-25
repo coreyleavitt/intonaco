@@ -47,6 +47,7 @@
 import std/[hashes, macros, tables]
 import ./signal
 import ./subscribable
+import ./runtime   # createEffect (the internal floor)
 
 proc hash(c: Computation): Hash {.inline.} = hash(cast[pointer](c))
   ## Hash a Computation by pointer identity — the natural key for a

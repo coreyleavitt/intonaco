@@ -15,7 +15,8 @@
 
 {.experimental: "callOperator".}
 
-import ./signal
+import ./subscribable   # Subscribable / trackRead / notify / ReactiveRead
+import ./runtime        # createEffect (the internal floor)
 
 type
   Dynamic*[T] = ref object of Subscribable

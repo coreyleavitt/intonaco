@@ -23,6 +23,7 @@
 
 import std/unittest
 import intonaco/reactive/signal
+import intonaco/reactive/runtime
 
 suite "consistency spike — diamond glitch-freedom":
 

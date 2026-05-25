@@ -4,6 +4,7 @@
 
 import std/[unittest, macros]
 import intonaco/reactive/signal
+import intonaco/reactive/subscribable   # ReactiveRead / ReactiveWrite tags
 import intonaco/reactive/purity
 
 let s = signal(0, label = "s")

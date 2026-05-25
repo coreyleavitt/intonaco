@@ -17,7 +17,8 @@
 ## Analysis only — *policy* lives in the classifier that consumes this.
 
 import std/[macros, effecttraits]
-import ./signal   # ReactiveRead / ReactiveWrite tags
+# Reactive-access tags (ReactiveRead / ReactiveWrite) are matched by their
+# inferred `repr` from `getTagsList`, so no type import is needed here.
 
 type
   ReactiveEffect* = enum

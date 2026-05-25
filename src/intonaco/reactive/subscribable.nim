@@ -52,6 +52,24 @@
 ## destruct.
 
 type
+  ReactiveRead* = object of RootEffect
+    ## A tracked read of reactive state, as a Nim `tags` effect (#49). The
+    ## effect denotes "this code forms a dependency edge" — it is carried by
+    ## EVERY reactive accessor (`Signal.get`, `Dynamic.get`, …), so the
+    ## classifier's purity gate catches a reactive read hidden behind a helper
+    ## regardless of which reactive type it reads. Consumers write
+    ## `{.forbids: [ReactiveRead].}` for a context that must not read reactive
+    ## state. Untracked reads (`peek`) are deliberately untagged.
+
+  ReactiveWrite* = object of RootEffect
+    ## A write to reactive state, as a Nim `tags` effect (#49). Injected via a
+    ## pure raw-store proc (e.g. `Signal.setRaw`) — NOT declared on `set`, which
+    ## also journals + notifies and so has unbounded effects (a `tags:[X]` upper
+    ## bound can't hold). The declared tag injects `ReactiveWrite` into every
+    ## `set` caller, so `{.forbids: [ReactiveWrite].}` catches mutation (e.g. a
+    ## render path). `forbids` is surgically precise: carrying the RootEffect
+    ## supertype (which `set` does, via `notify`) does NOT trigger it.
+
   ObserverList* = object
     items*: seq[Computation]
     iterDepth: int

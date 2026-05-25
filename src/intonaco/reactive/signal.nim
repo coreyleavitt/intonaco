@@ -21,10 +21,8 @@
 {.experimental: "callOperator".}
 
 import std/macros
-import ./scope
 import ./subscribable
 import ./height
-export subscribable
 import ./speculative
 import ./restoration
 import intonaco/journal/events
@@ -35,25 +33,9 @@ type
     val: T
     label*: string
 
-  ReactiveRead* = object of RootEffect
-    ## A tracked read of reactive state, as a Nim `tags` effect (#49). The
-    ## effect denotes "this code forms a dependency edge" — it is carried by
-    ## EVERY reactive accessor, not just `Signal.get`: `Dynamic.get` declares
-    ## it too, so the classifier's purity gate catches a reactive read hidden
-    ## behind a helper regardless of which reactive type it reads. Consumers
-    ## write `{.forbids: [ReactiveRead].}` for a context that must not read
-    ## reactive state. `peek` is deliberately untagged — an untracked read
-    ## creates no dependency.
-
-  ReactiveWrite* = object of RootEffect
-    ## A write to reactive state, as a Nim `tags` effect (#49). Injected via
-    ## the pure `setRaw` below — NOT declared on `set`, which also journals +
-    ## notifies and so has unbounded effects (a `tags:[X]` upper bound can't
-    ## hold). A declared tag on the pure `setRaw` injects `ReactiveWrite` into
-    ## every `set` caller, so `{.forbids: [ReactiveWrite].}` catches mutation
-    ## (e.g. a render path). `forbids` is surgically precise: carrying the
-    ## RootEffect supertype (which `set` does, via `notify`) does NOT trigger
-    ## it.
+# The `ReactiveRead` / `ReactiveWrite` `tags` effects live in `subscribable`
+# (they describe reactive-state access generally, not signals specifically);
+# `get` / `setRaw` below declare them.
 
 # --- Signal -----------------------------------------------------------------
 
@@ -148,39 +130,6 @@ proc setUntracked*[T](s: Signal[T], newVal: T) {.gcsafe, raises: [].} =
   ## settled value is journaled.
   s.setCore(newVal, journal = false)
 
-# --- Computations -----------------------------------------------------------
-
-proc createEffect*(body: proc() {.closure.}, kind = ckEffect,
-                   fixedHeight = -1): Computation {.gcsafe, discardable.} =
-  ## Run `body` immediately, tracking signal reads; re-run on any
-  ## tracked signal's change until the enclosing scope is disposed.
-  ## Returns the Computation (discardable) so `createComputed` can read
-  ## its height and tag its kind.
-  ##
-  ## `fixedHeight >= 0` bakes the height (#53): the Architecture-B macros pass
-  ## the compile-time-resolved height so subscribe-time accumulation does not
-  ## override it. `-1` (the default / explicit-dynamic path) accumulates.
-  {.cast(gcsafe).}:
-    let comp = Computation(kind: kind)
-    if fixedHeight >= 0:
-      comp.height = fixedHeight
-      comp.heightFixed = true
-    comp.run = proc() =
-      if comp.disposed: return
-      unsubscribeAll(comp)
-      let prev = currentComputation
-      currentComputation = comp
-      try:
-        body()
-      finally:
-        currentComputation = prev
-    if currentScope != nil:
-      onCleanup proc() =
-        comp.disposed = true
-        unsubscribeAll(comp)
-    comp.run()
-    result = comp
-
 template `:=`*[T](s: Signal[T], v: T): untyped =
   ## DSL sugar for signal writes: `count := 5` ≡ `count.set(5)`.
   s.set(v)
@@ -214,22 +163,3 @@ macro signals*(body: untyped): untyped =
     else:
       error("signals: arm must be `name = value`; got " &
             stmt.repr, stmt)
-
-proc createComputed*[T](body: proc(): T {.closure.}, fixedHeight = -1): Signal[T]
-    {.gcsafe.} =
-  ## A derived signal that re-evaluates when its dependencies change.
-  ## Reading the returned signal both yields the current value and
-  ## subscribes the current computation to it.
-  ##
-  ## `fixedHeight >= 0` bakes the producing computation's height (#53); the
-  ## output signal then carries that baked height for downstream readers.
-  {.cast(gcsafe).}:
-    var initial: T
-    let outSig = Signal[T](val: initial)
-    let comp = createEffect((proc() = outSig.set(body())), kind = ckComputed,
-                            fixedHeight = fixedHeight)
-    # The output signal carries the producing computation's height, so
-    # downstream readers compute their height relative to it. (When baked,
-    # comp.height is the fixed height; otherwise the accumulated one.)
-    outSig.height = comp.height
-    result = outSig

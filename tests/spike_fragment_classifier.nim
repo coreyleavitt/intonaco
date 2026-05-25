@@ -20,6 +20,7 @@
 
 import std/[macros, strutils]
 import intonaco/reactive/signal
+import intonaco/reactive/runtime
 
 # --- detection primitives (reimplemented; tracked.nim's are unexported) ----
 

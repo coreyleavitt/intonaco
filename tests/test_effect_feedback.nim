@@ -12,6 +12,7 @@
 
 import std/unittest
 import intonaco/reactive/signal
+import intonaco/reactive/runtime
 
 suite "effect-feedback under the uniform worklist":
 

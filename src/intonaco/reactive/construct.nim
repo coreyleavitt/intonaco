@@ -15,8 +15,8 @@
 ## They build on the `createComputed`/`createEffect` procs (the runtime layer);
 ## those procs remain the explicit unclassified/dynamic path.
 
-import std/[macros, options]
-import ./signal
+import std/macros
+import ./runtime   # createComputed / createEffect — emitted via bindSym
 import ./classify
 import ./height
 import ../verification

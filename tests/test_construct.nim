@@ -6,6 +6,7 @@
 
 import std/[unittest, macros, options, strutils]
 import intonaco/reactive/signal
+import intonaco/reactive/runtime
 import intonaco/reactive/height
 import intonaco/reactive/classify
 import intonaco/reactive/construct

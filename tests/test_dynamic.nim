@@ -8,6 +8,7 @@
 
 import std/[unittest, macros, strutils, options]
 import intonaco/reactive/signal
+import intonaco/reactive/runtime
 import intonaco/reactive/dynamic
 import intonaco/reactive/classify
 import intonaco/reactive/construct
