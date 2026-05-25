@@ -13,8 +13,10 @@
 import std/[sequtils, macros, options]
 import ./subscribable
 import ./collection
+import ./signal
 import ./height
 import ./classify
+import ./convergence
 
 proc mapDelta[T, U](d: Delta[T], f: proc(x: T): U {.closure.}): Delta[U] =
   ## Map a source delta to the corresponding delta on the mapped view —
@@ -123,6 +125,57 @@ proc filtered*[T](c: ReactiveCollection[T], p: proc(x: T): bool {.closure.},
     of dkRollback: recompute()   # recompute from the reverted source (the oracle)
   d
 
+proc folded*[T, M: CommutativeGroup](c: ReactiveCollection[T],
+    f: proc(x: T): M {.closure.}, fixedHeight = -1): Signal[M] =
+  ## The runtime floor under the `fold` macro — collection→scalar. Maintains
+  ## `acc = ⊕ f(x)` over a commutative GROUP: the inverse makes remove/update
+  ## O(1) (`merge(acc, invert(m))`), where the group laws (assoc/comm/inverse)
+  ## are exactly what make the incremental aggregate equal the wholesale fold.
+  ## `contributions[i]` holds `f(source[i])`, so a remove/update can undo the
+  ## departed element's contribution without its value (the delta carries only
+  ## an index). `f` must be pure (enforced by the macro).
+  mixin merge, unit, invert
+  var contributions: seq[M]
+  var acc = unit(M)
+  for x in c.get():
+    let m = f(x)
+    contributions.add m
+    acc = merge(acc, m)
+  let outSig = signal(acc)
+  if fixedHeight >= 0: outSig.height = fixedHeight
+  c.onDelta proc(delta: Delta[T]) =
+    case delta.kind
+    of dkInsert:
+      let m = f(delta.insertVal)
+      contributions.insert(m, delta.insertIdx)
+      acc = merge(acc, m)
+    of dkRemove:
+      acc = merge(acc, invert(contributions[delta.removeIdx]))
+      contributions.delete(delta.removeIdx)
+    of dkUpdate:
+      let m = f(delta.updateVal)
+      acc = merge(merge(acc, invert(contributions[delta.updateIdx])), m)
+      contributions[delta.updateIdx] = m
+    of dkClear:
+      contributions.setLen(0)
+      acc = unit(M)
+    of dkReplace:
+      contributions.setLen(0)
+      acc = unit(M)
+      for x in delta.replaceVal:
+        let m = f(x)
+        contributions.add m
+        acc = merge(acc, m)
+    of dkRollback:                  # recompute from the reverted source
+      contributions.setLen(0)
+      acc = unit(M)
+      for x in c.get():
+        let m = f(x)
+        contributions.add m
+        acc = merge(acc, m)
+    outSig.set(acc)
+  outSig
+
 proc sourceHeight(coll: NimNode): int {.compileTime.} =
   ## The compile-time height of a `derive` source. A `CollectionSignal[_]` is
   ## ALWAYS a source (a derived view is a plain `ReactiveCollection` carrying a
@@ -179,3 +232,9 @@ macro keep*(name: untyped, coll: typed, p: typed): untyped =
   ## `std/sequtils` exports `filter`, and the new-binding name in `keep e, c, p`
   ## would collide during overload resolution. `p` must be pure (linear).
   transformBinding(name, coll, p, bindSym"filtered", "keep")
+
+macro fold*(name: untyped, coll: typed, f: typed): untyped =
+  ## A compile-time-scheduled incremental aggregate (collection→scalar) over a
+  ## commutative group — the floor is `folded`. `acc = ⊕ f(x)`, maintained O(1)
+  ## per delta via the group inverse. `f` must be pure (linear).
+  transformBinding(name, coll, f, bindSym"folded", "fold")

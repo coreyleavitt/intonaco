@@ -28,6 +28,15 @@ type
     ## required. E.g. set-union, max.
     merge(x, y) is type(x)
 
+  CommutativeGroup* = concept x
+    ## A `CommutativeMonoid` with an `invert` (additive inverse). The inverse is
+    ## what makes an incremental `fold` O(1) on remove/update: the contribution
+    ## of a departed element is undone by `merge(acc, invert(m))`. Witness-checked
+    ## law: `merge(x, invert(x)) == unit(T)`. E.g. (int, +, 0, negate).
+    merge(x, x) is type(x)
+    unit(type(x)) is type(x)
+    invert(x) is type(x)
+
 proc allValues*[T: Ordinal](): seq[T] =
   ## Every value of a finite ordinal type — pass as `samples` to make a law
   ## witness-check EXHAUSTIVE (hence a real proof, not a sample).

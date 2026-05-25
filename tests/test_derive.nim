@@ -158,3 +158,19 @@ suite "filter — linear incremental filtered view":
     check lbl.get() == @["#2", "#4", "#6"]
     c.push(7)                                          # odd, filtered before map
     check lbl.get() == @["#2", "#4", "#6"]
+
+# int as a commutative group under addition (sum) — merge/unit/invert.
+proc merge(a, b: int): int = a + b
+proc unit(t: typedesc[int]): int = 0
+proc invert(a: int): int = -a
+
+let fc = collection(@[1, 2, 3])
+fold total, fc, proc(x: int): int = x   # sum, maintained incrementally
+
+suite "fold — linear incremental aggregate over a commutative group":
+  test "14. maintains the aggregate incrementally (insert/remove/update/clear)":
+    check total() == 6
+    fc.push(4);      check total() == 10   # +4
+    fc.remove(0);    check total() == 9    # -1 (removed the 1)
+    fc.setAt(0, 20); check total() == 27   # 2 -> 20 (+18)
+    fc.clear();      check total() == 0    # identity
