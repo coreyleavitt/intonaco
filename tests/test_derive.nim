@@ -121,3 +121,40 @@ suite "derive — emits mapped deltas, and composes":
     check twice.get() == @[20, 30, 40]
     cc.push(4)
     check twice.get() == @[20, 30, 40, 50]   # ((4+1) * 10)
+
+let nums = collection(@[1, 2, 3, 4])
+keep evens, nums, proc(x: int): bool = x mod 2 == 0   # [2, 4]
+
+suite "filter — linear incremental filtered view":
+  test "10. value is the filtered source; updates incrementally":
+    check evens.get() == @[2, 4]
+    nums.push(6)                  # kept -> view grows
+    check evens.get() == @[2, 4, 6]
+    nums.push(7)                  # filtered out -> no view change
+    check evens.get() == @[2, 4, 6]
+
+  test "11. index translation: mutations crossing the predicate stay equal":
+    let c = collection(@[1, 2, 3, 4, 5, 6])
+    keep ev, c, proc(x: int): bool = x mod 2 == 0   # [2, 4, 6]
+    template eq = check ev.get() == c.get().filterIt(it mod 2 == 0)
+    eq
+    c.insert(0, 8);    eq   # kept, at front
+    c.insert(3, 9);    eq   # filtered-out, mid — shifts source idx, not view
+    c.remove(1);       eq   # remove a kept element mid-sequence
+    c.setAt(2, 7);     eq   # kept -> filtered-out (leaves the view)
+    c.setAt(2, 10);    eq   # filtered-out -> kept (enters the view)
+    c.set(@[2, 3, 4]); eq   # replace
+    c.clear();         eq   # clear
+
+  test "12. an impure predicate is a compile error":
+    check not compiles(keep(odd, nums, proc(x: int): bool = (x + theme()) mod 2 == 0))
+
+  test "13. keep composes with derive (filter then map, height stacks)":
+    let c = collection(@[1, 2, 3, 4])
+    keep evn, c, proc(x: int): bool = x mod 2 == 0   # [2, 4]
+    derive lbl, evn, proc(x: int): string = "#" & $x  # ["#2", "#4"]
+    check lbl.get() == @["#2", "#4"]
+    c.push(6)
+    check lbl.get() == @["#2", "#4", "#6"]
+    c.push(7)                                          # odd, filtered before map
+    check lbl.get() == @["#2", "#4", "#6"]

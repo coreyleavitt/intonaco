@@ -55,6 +55,74 @@ proc mapped*[T, U](c: ReactiveCollection[T], f: proc(x: T): U {.closure.},
       pushDelta(d, mapDelta(delta, f))   # mapped delta: apply + emit to d's consumers
   d
 
+proc filtered*[T](c: ReactiveCollection[T], p: proc(x: T): bool {.closure.},
+                  fixedHeight = -1): ReactiveCollection[T] =
+  ## The runtime floor under the `filter` macro. A filtered view of `c`:
+  ## `value === c.filter(p)`, maintained incrementally. `filter` is linear
+  ## (selection distributes over disjoint union), but the POSITIONAL model needs
+  ## a source→view index translation: `kept[i]` mirrors `p(source[i])`, and a
+  ## source index maps to a view index by `rank` (kept elements strictly before
+  ## it). `p` must be pure (enforced by the macro) — a signal-dependent predicate
+  ## is bilinear, out of scope.
+  let src = c.get()
+  var kept = newSeq[bool](src.len)
+  var initial: seq[T]
+  for i in 0 ..< src.len:
+    kept[i] = p(src[i])
+    if kept[i]: initial.add src[i]
+  let h = if fixedHeight >= 0: fixedHeight else: Subscribable(c).height + 1
+  let d = newReactive[T](initial, height = h)
+  # rank(i) = number of kept elements strictly before source index i. O(i) here;
+  # an order-statistic / Fenwick structure makes it O(log n) without changing the
+  # rule (a localized optimization for large collections).
+  proc rank(i: int): int =
+    for j in 0 ..< i:
+      if kept[j]: inc result
+  proc recompute() =
+    let s = c.get()
+    kept = newSeq[bool](s.len)
+    var fv: seq[T]
+    for i in 0 ..< s.len:
+      kept[i] = p(s[i])
+      if kept[i]: fv.add s[i]
+    pushDelta(d, Delta[T](kind: dkReplace, replaceVal: fv))
+  c.onDelta proc(delta: Delta[T]) =
+    case delta.kind
+    of dkInsert:
+      let r = rank(delta.insertIdx)
+      let k = p(delta.insertVal)
+      kept.insert(k, delta.insertIdx)
+      if k: pushDelta(d, Delta[T](kind: dkInsert, insertIdx: r, insertVal: delta.insertVal))
+    of dkRemove:
+      let r = rank(delta.removeIdx)
+      let was = kept[delta.removeIdx]
+      kept.delete(delta.removeIdx)
+      if was: pushDelta(d, Delta[T](kind: dkRemove, removeIdx: r))
+    of dkUpdate:
+      let r = rank(delta.updateIdx)
+      let oldK = kept[delta.updateIdx]
+      let newK = p(delta.updateVal)
+      kept[delta.updateIdx] = newK
+      if oldK and newK:
+        pushDelta(d, Delta[T](kind: dkUpdate, updateIdx: r, updateVal: delta.updateVal))
+      elif oldK and not newK:
+        pushDelta(d, Delta[T](kind: dkRemove, removeIdx: r))
+      elif (not oldK) and newK:
+        pushDelta(d, Delta[T](kind: dkInsert, insertIdx: r, insertVal: delta.updateVal))
+      # else: stays filtered out — no view delta
+    of dkClear:
+      kept.setLen(0)
+      pushDelta(d, Delta[T](kind: dkClear))
+    of dkReplace:
+      kept = newSeq[bool](delta.replaceVal.len)
+      var fv: seq[T]
+      for i in 0 ..< delta.replaceVal.len:
+        kept[i] = p(delta.replaceVal[i])
+        if kept[i]: fv.add delta.replaceVal[i]
+      pushDelta(d, Delta[T](kind: dkReplace, replaceVal: fv))
+    of dkRollback: recompute()   # recompute from the reverted source (the oracle)
+  d
+
 proc sourceHeight(coll: NimNode): int {.compileTime.} =
   ## The compile-time height of a `derive` source. A `CollectionSignal[_]` is
   ## ALWAYS a source (a derived view is a plain `ReactiveCollection` carrying a
@@ -68,31 +136,46 @@ proc sourceHeight(coll: NimNode): int {.compileTime.} =
   error("derive: `" & coll.repr & "` is not a statically-resolvable collection " &
         "source (a plain `collection()` or a named `derive` result)", coll)
 
-macro derive*(name: untyped, coll: typed, f: typed): untyped =
-  ## A compile-time-scheduled mapped view of a collection — the blessed form
-  ## (the floor is `mapped`). The source's height is resolved at compile time
-  ## (a `CollectionSignal` is height 0 by construction), composed, and baked
-  ## onto `name` so the node is in the static fragment and downstream `derive`s
-  ## compose through it.
-  # The map must be PURE. `derive` is a LINEAR operator (`map(f)(c ⊕ δ) =
-  # map(f)(c) ⊕ map(f)(δ)`), which is what makes incremental == apply-to-delta
-  # sound. A signal-dependent map is BILINEAR (a collection×signal join) — out
-  # of scope; express it as a `computed` (`c.get().map(...)`) or at the render
-  # layer. Classify the map's BODY — for a named proc, via `getImpl` — so the
-  # check catches reactive reads TRANSITIVELY (through helper procs), not just
-  # in an inline lambda.
-  let fBody =
-    if f.kind in {nnkLambda, nnkProcDef, nnkFuncDef}: f.body
-    elif f.kind == nnkSym and f.getImpl.kind in {nnkProcDef, nnkFuncDef}: f.getImpl.body
-    else: f
-  let cls = classify(fBody)
+proc requirePure(fn: NimNode, op: string) {.compileTime.} =
+  ## Reject a function argument that reads reactive state. The collection
+  ## operators (`map`/`filter`) are LINEAR — `op(c ⊕ δ) = op(c) ⊕ op(δ)` — which
+  ## is what makes incremental == apply-to-delta sound; a signal-dependent
+  ## function makes it bilinear (a join), out of scope. Classify the function's
+  ## BODY — for a named proc, via `getImpl` — so reads are caught TRANSITIVELY
+  ## (through helper procs), not just in an inline lambda.
+  let body =
+    if fn.kind in {nnkLambda, nnkProcDef, nnkFuncDef}: fn.body
+    elif fn.kind == nnkSym and fn.getImpl.kind in {nnkProcDef, nnkFuncDef}: fn.getImpl.body
+    else: fn
+  let cls = classify(body)
   if cls.tier == tDynamic or (cls.tier == tStatic and cls.height > 0):
-    error("derive: the map reads reactive state — `derive` is a linear (pure) " &
-          "map. For a signal-dependent map use a `computed` (`c.get().map(...)`) " &
-          "or apply it at the render layer; a collection×signal map is a join, " &
-          "deliberately out of scope.", f)
+    error(op & ": the function reads reactive state — collection operators are " &
+          "linear (pure). For a signal-dependent transform use a `computed` " &
+          "(`c.get()` then transform) or apply it at the render layer; a " &
+          "collection×signal transform is a join, deliberately out of scope.", fn)
+
+proc transformBinding(name, coll, fn, floor: NimNode, op: string): NimNode
+    {.compileTime.} =
+  ## Shared emission for the linear collection-transform macros: enforce purity,
+  ## resolve+compose the source height at compile time, bake it onto `name`, and
+  ## emit `floor(coll, fn, fixedHeight = h)`. So the binding is in the static
+  ## fragment and downstream transforms compose through its baked height.
+  requirePure(fn, op)
   let h = sourceHeight(coll) + 1
-  let ctor = newCall(bindSym"mapped", coll, f,
+  let ctor = newCall(floor, coll, fn,
     nnkExprEqExpr.newTree(ident"fixedHeight", newLit(h)))
   nnkLetSection.newTree(nnkIdentDefs.newTree(
     withHeight(name, h), newEmptyNode(), ctor))
+
+macro derive*(name: untyped, coll: typed, f: typed): untyped =
+  ## A compile-time-scheduled mapped view of a collection — the blessed `map`
+  ## (the floor is `mapped`). `f` must be pure (linear `map`); the height is
+  ## resolved + baked so downstream transforms compose.
+  transformBinding(name, coll, f, bindSym"mapped", "derive")
+
+macro keep*(name: untyped, coll: typed, p: typed): untyped =
+  ## A compile-time-scheduled filtered view — keeps the elements satisfying `p`
+  ## (the floor is `filtered`). Named `keep` rather than `filter` because
+  ## `std/sequtils` exports `filter`, and the new-binding name in `keep e, c, p`
+  ## would collide during overload resolution. `p` must be pure (linear).
+  transformBinding(name, coll, p, bindSym"filtered", "keep")
