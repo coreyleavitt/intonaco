@@ -12,6 +12,7 @@
 // split.md for the architectural framing.
 
 name "intonaco"
+src_dir "src"
 
 deps {
     // Async runtime: our chronos fork with the contextVar primitive that
