@@ -34,6 +34,9 @@ task test, "run intonaco's standalone tests":
     "tests/test_convergence.nim",
     "tests/test_dynamic.nim",
     "tests/test_surface.nim",
+    "tests/test_scan.nim",
+    "tests/test_collection.nim",
+    "tests/test_derive.nim",
   ]
   for t in tests:
     exec "nim r --hints:off --warnings:off --path:src " & t

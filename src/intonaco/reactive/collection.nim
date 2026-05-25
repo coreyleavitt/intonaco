@@ -31,9 +31,11 @@
 
 {.experimental: "callOperator".}
 
+import std/macros
 import ./subscribable
 import ./scope
 import ./speculative
+import ./height
 import intonaco/journal/events
 import intonaco/journal/log
 
@@ -67,6 +69,16 @@ type
 
   DeltaHandler*[T] = proc(d: Delta[T]) {.closure.}
 
+  DeltaConsumer[T] = ref object
+    ## A height-scheduled delta sink. `comp` is subscribed to the collection
+    ## (so it carries a height and fires through the worklist, NOT eagerly);
+    ## `pending` buffers the deltas of the current propagation until `comp`
+    ## fires at its height and drains them. This is what keeps a derived node
+    ## reading the collection glitch-free in a diamond — the eager fanout it
+    ## replaces would fire consumers before the collection's siblings settled.
+    comp: Computation
+    pending: seq[Delta[T]]
+
   RollbackBufferEntry[T] = ref object
     ## Per-collection per-scope buffer of captured inverses, chained
     ## up through parent speculative frames so nested commit can
@@ -85,7 +97,7 @@ type
       ## Identifier emitted with `ekCollectionDelta` journal events.
       ## Unlabeled collections skip journaling — match the rule for
       ## unlabeled signals so the journal is consistent.
-    deltaObservers: seq[DeltaHandler[T]]
+    deltaConsumers: seq[DeltaConsumer[T]]
     rollbackHead: RollbackBufferEntry[T]
       ## Top of the per-scope buffer chain; nil outside speculative
       ## scopes. Mutated only by `captureInverse` and the registered
@@ -95,17 +107,57 @@ proc collection*[T](initial: seq[T] = @[], label = ""): CollectionSignal[T] =
   ## Constructor matching the `signal(initial)` naming for plain signals.
   CollectionSignal[T](items: initial, label: label)
 
+macro collections*(body: untyped): untyped =
+  ## Declare one or more collection sources in a colon block, mirroring
+  ## `signals:`:
+  ##
+  ##   collections:
+  ##     log = @[]
+  ##     rows = @["a", "b"]
+  ##
+  ## Each binding is baked with `{.height: 0.}` (collections are sources by
+  ## definition) so a `scan` / derived node over its delta stream can resolve a
+  ## static height at compile time.
+  expectKind(body, nnkStmtList)
+  result = newStmtList()
+  for stmt in body:
+    case stmt.kind
+    of nnkAsgn:
+      let name = stmt[0]
+      let value = stmt[1]
+      let labelLit = newLit($name)
+      result.add nnkLetSection.newTree(nnkIdentDefs.newTree(
+        withHeight(name, 0), newEmptyNode(),
+        newCall(bindSym"collection", value,
+                nnkExprEqExpr.newTree(ident"label", labelLit))))
+    else:
+      error("collections: arm must be `name = value`; got " &
+            stmt.repr, stmt)
+
 # --- Subscription --------------------------------------------------------
 
 proc onDelta*[T](c: CollectionSignal[T], handler: DeltaHandler[T]) =
-  ## Register `handler` to receive every delta. Lifetime-bound to the
-  ## current scope via onCleanup so it deregisters when the scope dies.
-  c.deltaObservers.add handler
+  ## Register `handler` to receive every delta — height-scheduled. The handler
+  ## fires through the worklist at the consumer's height (`c.height + 1`), after
+  ## every lower-height dependency of the same propagation has settled, NOT
+  ## eagerly inside the mutation. Lifetime-bound to the current scope.
+  let dc = DeltaConsumer[T](comp: Computation(kind: ckEffect))
+  dc.comp.run = proc() =
+    let batch = dc.pending
+    dc.pending = @[]
+    for d in batch:
+      try: handler(d)
+      except Exception: discard
+        # A faulty delta handler must not break siblings or the writing task.
+  subscribe(Subscribable(c), dc.comp)   # in c.observers, height = c.height + 1
+  c.deltaConsumers.add dc
   let captured = c
-  let h = handler
+  let cdc = dc
   onCleanup proc() =
-    let idx = captured.deltaObservers.find(h)
-    if idx >= 0: captured.deltaObservers.del idx
+    cdc.comp.disposed = true
+    let idx = captured.deltaConsumers.find(cdc)
+    if idx >= 0: captured.deltaConsumers.del idx
+    unsubscribeAll(cdc.comp)
 
 proc opRepr[T](d: Delta[T]): string =
   ## Compact one-token repr of a non-rollback delta for the journal
@@ -173,44 +225,21 @@ proc journalRollback[T](c: CollectionSignal[T], d: Delta[T]) =
   journalEvent:
     jrnl.logCollectionRollback(taskTid, parentEvt, c.label, d.rollbackOps.len, ops)
 
-proc fanout[T](c: CollectionSignal[T], d: Delta[T]) =
-  ## Notify delta-aware handlers and trigger plain reactive
-  ## observers. No journaling — the caller decides which event
-  ## (`ekCollectionDelta` per forward op, `ekCollectionRollback`
-  ## once per rolled-back collection) to write.
-  ##
-  ## Explicit-copy snapshot defeats Nim's cursor inference. A
-  ## handler body that triggers deregistration (e.g. a sibling
-  ## scope's onCleanup calling `c.deltaObservers.del idx`) mutates
-  ## the live seq mid-fanout; an aliased snapshot would corrupt
-  ## the in-progress iteration. Per-handler `add` materializes a
-  ## genuine independent buffer.
-  # Iterate by index over the deltaObservers, capturing startLen once.
-  # Defeats Nim's cursor-inference hazard where `let snap =
-  # c.deltaObservers` becomes a non-retaining cursor of the live seq:
-  # a handler that triggers deregistration (e.g. via a sibling
-  # scope's onCleanup calling `c.deltaObservers.del idx`) would
-  # corrupt the iteration. Bounds-check on every step so a `del`
-  # that shifts the live seq doesn't run us past valid indices —
-  # mid-fanout deregistration skips not-yet-fired handlers (matching
-  # the Signal.observers RCU contract: structural mutations during
-  # notify apply on subsequent cycles).
-  let startLen = c.deltaObservers.len
-  var i = 0
-  while i < c.deltaObservers.len and i < startLen:
-    let h = c.deltaObservers[i]
-    inc i
-    try: h(d)
-    except Exception: discard
-      # User-supplied delta handler — same swallow rationale as
-      # signal.notify: a faulty observer shouldn't break siblings
-      # or propagate out through the mutating call.
+proc deliver[T](c: CollectionSignal[T], d: Delta[T]) =
+  ## Buffer `d` onto every delta consumer, then a SINGLE `notify` enqueues all
+  ## of `c`'s observers (the delta consumers' computations AND plain reactive
+  ## observers) into one height-ordered drain. Each consumer fires at its
+  ## height and drains its buffer; plain observers re-read `c`. No eager firing,
+  ## so a derived node and a sibling observer of `c` settle in the right order.
+  for dc in c.deltaConsumers:
+    if not dc.comp.disposed:
+      dc.pending.add d
   notify(Subscribable(c))
 
 proc emit[T](c: CollectionSignal[T], d: Delta[T]) =
-  ## Fan out + journal a forward mutation.
+  ## Deliver + journal a forward mutation.
   journalDelta(c, d)
-  fanout(c, d)
+  deliver(c, d)
 
 proc trackCollectionRead[T](c: CollectionSignal[T]) =
   ## Subscribe the current Computation (if any) to this collection.
@@ -268,7 +297,7 @@ proc captureInverse[T](c: CollectionSignal[T], inv: Delta[T]) =
         let batched = Delta[T](kind: dkRollback, rollbackOps: head.inverses)
         applyDelta(captured, batched)
         journalRollback(captured, batched)
-        fanout(captured, batched)
+        deliver(captured, batched)
         captured.rollbackHead = head.next
       onSpeculativeCommit proc() =
         # Promote inverses into the parent buffer if one exists so an

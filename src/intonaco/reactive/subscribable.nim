@@ -221,14 +221,36 @@ var gQueue {.threadvar.}: seq[Computation]
   ## linear min-height scan — fine for the small graphs under test; the
   ## production form is a bucketed-by-height array (see RFC "Nim leverage").
 
+proc drainQueue() {.gcsafe, raises: [].} =
+  ## Drain the worklist in height order. Assumes `gPropagating` is already set
+  ## by `notify`, so nested writes during a `run()` enqueue rather than recurse
+  ## — a node only fires after every lower-height dependency has settled. A
+  ## raising observer is swallowed (a faulty observer must not break siblings
+  ## or the writing task).
+  {.cast(gcsafe).}:
+    while gQueue.len > 0:
+      # Extract the minimum-height still-queued Computation.
+      var mi = 0
+      for i in 1 ..< gQueue.len:
+        if gQueue[i].height < gQueue[mi].height: mi = i
+      let c = gQueue[mi]
+      gQueue.del(mi)          # swap-remove; order irrelevant (we min-scan)
+      c.inQueue = false
+      if not c.disposed:
+        # Effect firewall: an observer's effects are fired BY THE SCHEDULER,
+        # not by the code that wrote the signal, so they must not leak into
+        # the writer's inferred `tags`. Without this every `set` caller
+        # inherits the catch-all `RootEffect` (observers do arbitrary things),
+        # defeating `RootEffect`-as-opacity-signal in the classifier.
+        # cast(tags:[]) strips it; runtime is unchanged. See reactive/purity.
+        try:
+          {.cast(tags: []).}:
+            c.run()
+        except Exception: discard
+
 proc notify*(s: Subscribable) {.gcsafe, raises: [].} =
-  ## Enqueue every Computation observing `s` into the height-ordered
-  ## worklist; if no propagation is in flight, drain it. A nested write
-  ## during a drained `run()` enqueues (because `gPropagating` is set)
-  ## instead of recursing — this is what makes propagation glitch-free:
-  ## a node only fires after every lower-height dependency has settled.
-  ## A raising observer is swallowed (a faulty observer must not break
-  ## siblings or the writing task).
+  ## Enqueue every Computation observing `s` into the height-ordered worklist;
+  ## if no propagation is in flight, drain it.
   {.cast(gcsafe).}:
     s.observers.iterRO c:
       if not c.disposed and not c.inQueue:
@@ -237,25 +259,7 @@ proc notify*(s: Subscribable) {.gcsafe, raises: [].} =
     if gPropagating: return
     gPropagating = true
     try:
-      while gQueue.len > 0:
-        # Extract the minimum-height still-queued Computation.
-        var mi = 0
-        for i in 1 ..< gQueue.len:
-          if gQueue[i].height < gQueue[mi].height: mi = i
-        let c = gQueue[mi]
-        gQueue.del(mi)          # swap-remove; order irrelevant (we min-scan)
-        c.inQueue = false
-        if not c.disposed:
-          # Effect firewall: an observer's effects are fired BY THE SCHEDULER,
-          # not by the code that wrote the signal, so they must not leak into
-          # the writer's inferred `tags`. Without this every `set` caller
-          # inherits the catch-all `RootEffect` (observers do arbitrary things),
-          # defeating `RootEffect`-as-opacity-signal in the classifier.
-          # cast(tags:[]) strips it; runtime is unchanged. See reactive/purity.
-          try:
-            {.cast(tags: []).}:
-              c.run()
-          except Exception: discard
+      drainQueue()
     finally:
       gPropagating = false
 
