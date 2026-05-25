@@ -82,3 +82,37 @@ suite "derive macro — glitch-free in a diamond":
     glitches = 0
     dc.push(2)
     check glitches == 0
+
+let pc = collection(@[1, 2, 3])
+signals:
+  theme = 10
+
+suite "derive macro — the map must be pure":
+  test "7. an impure map (reads a signal) is a compile error":
+    # A delta-only-maintained value can't track an external signal — the macro
+    # must reject reactive reads inside `f`.
+    check not compiles(derive(badp, pc, proc(x: int): int = x * theme()))
+    # the pure form compiles
+    check compiles(derive(okp, pc, proc(x: int): int = x * 2))
+
+let cc = collection(@[1, 2, 3])
+derive once, cc, proc(x: int): int = x + 1       # [2, 3, 4]
+derive twice, once, proc(x: int): int = x * 10   # [20, 30, 40]
+
+suite "derive — emits mapped deltas, and composes":
+  test "8. forwards a mapped delta to a consumer":
+    let c = collection(@[1, 2, 3])
+    let d = mapped(c, proc(x: int): int = x * 10)
+    var got: seq[Delta[int]]
+    onDelta(d, proc(delta: Delta[int]) = got.add delta)
+    c.push(4)
+    check got.len == 1
+    check got[0].kind == dkInsert
+    check got[0].insertIdx == 3
+    check got[0].insertVal == 40        # the MAPPED value
+
+  test "9. derive composes over a derived collection":
+    check heightLit(twice) == 2          # cc(0) -> once(1) -> twice(2)
+    check twice.get() == @[20, 30, 40]
+    cc.push(4)
+    check twice.get() == @[20, 30, 40, 50]   # ((4+1) * 10)

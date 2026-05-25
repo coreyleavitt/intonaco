@@ -87,17 +87,20 @@ type
     inverses: seq[Delta[T]]
     next: RollbackBufferEntry[T]
 
-  CollectionSignal*[T] = ref object of Subscribable
+  ReactiveCollection*[T] = ref object of Subscribable
+    ## A read-only-by-convention reactive collection: the items plus the
+    ## height-scheduled delta consumers. `CollectionSignal` adds mutation;
+    ## `derive` produces one driven by another collection's deltas (via
+    ## `pushDelta`). Read through `get`/`len`/`onDelta` — direct `.items`
+    ## access would bypass dependency tracking.
     items: seq[T]
-      ## Internal — read via `get()` or `len()` (which register the
-      ## reactive dependency); mutate via the delta-emitting ops.
-      ## Direct `.items` access would bypass `trackCollectionRead`,
-      ## silently breaking reactive subscription.
+    deltaConsumers: seq[DeltaConsumer[T]]
+
+  CollectionSignal*[T] = ref object of ReactiveCollection[T]
     label*: string
       ## Identifier emitted with `ekCollectionDelta` journal events.
       ## Unlabeled collections skip journaling — match the rule for
       ## unlabeled signals so the journal is consistent.
-    deltaConsumers: seq[DeltaConsumer[T]]
     rollbackHead: RollbackBufferEntry[T]
       ## Top of the per-scope buffer chain; nil outside speculative
       ## scopes. Mutated only by `captureInverse` and the registered
@@ -136,7 +139,7 @@ macro collections*(body: untyped): untyped =
 
 # --- Subscription --------------------------------------------------------
 
-proc onDelta*[T](c: CollectionSignal[T], handler: DeltaHandler[T]) =
+proc onDelta*[T](c: ReactiveCollection[T], handler: DeltaHandler[T]) =
   ## Register `handler` to receive every delta — height-scheduled. The handler
   ## fires through the worklist at the consumer's height (`c.height + 1`), after
   ## every lower-height dependency of the same propagation has settled, NOT
@@ -176,7 +179,7 @@ proc opRepr[T](d: Delta[T]): string =
   of dkReplace: "p:" & $d.replaceVal.len
   of dkRollback: ""   # rollback inverses never contain nested rollbacks
 
-proc applyDelta[T](c: CollectionSignal[T], d: Delta[T]) =
+proc applyDelta[T](c: ReactiveCollection[T], d: Delta[T]) =
   ## Apply `d` to the collection's items WITHOUT emitting observers or
   ## journaling. Used by the rollback hook to restore state before
   ## firing the single batched notification. For `dkRollback` walks
@@ -225,7 +228,7 @@ proc journalRollback[T](c: CollectionSignal[T], d: Delta[T]) =
   journalEvent:
     jrnl.logCollectionRollback(taskTid, parentEvt, c.label, d.rollbackOps.len, ops)
 
-proc deliver[T](c: CollectionSignal[T], d: Delta[T]) =
+proc deliver[T](c: ReactiveCollection[T], d: Delta[T]) =
   ## Buffer `d` onto every delta consumer, then a SINGLE `notify` enqueues all
   ## of `c`'s observers (the delta consumers' computations AND plain reactive
   ## observers) into one height-ordered drain. Each consumer fires at its
@@ -236,12 +239,25 @@ proc deliver[T](c: CollectionSignal[T], d: Delta[T]) =
       dc.pending.add d
   notify(Subscribable(c))
 
+proc pushDelta*[T](c: ReactiveCollection[T], d: Delta[T]) =
+  ## Apply `d` to `c` AND deliver it to `c`'s consumers — the external driver
+  ## for a derived collection (`derive`). No journaling: a derived view mirrors
+  ## its source, which journals on its own.
+  applyDelta(c, d)
+  deliver(c, d)
+
+proc newReactive*[T](initial: seq[T] = @[], height = 0): ReactiveCollection[T] =
+  ## A bare reactive collection seeded with `initial` at the given height — the
+  ## substrate for a derived view (`derive`), driven via `pushDelta`.
+  result = ReactiveCollection[T](items: initial)
+  result.height = height
+
 proc emit[T](c: CollectionSignal[T], d: Delta[T]) =
   ## Deliver + journal a forward mutation.
   journalDelta(c, d)
   deliver(c, d)
 
-proc trackCollectionRead[T](c: CollectionSignal[T]) =
+proc trackCollectionRead[T](c: ReactiveCollection[T]) =
   ## Subscribe the current Computation (if any) to this collection.
   ## Called from `get` / `len` so plain reactive code that reads
   ## these naturally tracks them.
@@ -252,18 +268,18 @@ proc trackCollectionRead[T](c: CollectionSignal[T]) =
 
 # --- Read ----------------------------------------------------------------
 
-proc get*[T](c: CollectionSignal[T]): seq[T] =
+proc get*[T](c: ReactiveCollection[T]): seq[T] =
   ## Snapshot of the current items. Returns by value; callers don't
   ## mutate this — use the delta-emitting ops below.
   trackCollectionRead(c)
   c.items
 
-proc `()`*[T](c: CollectionSignal[T]): seq[T] = c.get()
+proc `()`*[T](c: ReactiveCollection[T]): seq[T] = c.get()
   ## Sugar — `items()` reads + tracks; same as `items.get()`.
   ## Mirrors `Signal[T]`'s `()` operator for API symmetry. Requires
   ## `{.experimental: "callOperator".}` at the call site.
 
-proc len*[T](c: CollectionSignal[T]): int =
+proc len*[T](c: ReactiveCollection[T]): int =
   ## Length of the collection. Tracked: a `createEffect` / `tracked:`
   ## body that reads `.len` re-runs when the collection mutates.
   trackCollectionRead(c)
