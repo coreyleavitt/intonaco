@@ -61,6 +61,10 @@ proc dynReasonSymptom(r: DynReason): string =
   of drForeign:        "it calls the foreign binding `" & r.callee &
                        "`, which could read a signal through a callback"
   of drUnscheduledDep: "it depends on a value that isn't resolved at compile time"
+  of drDynamicValue:
+    if r.callee.len > 0:
+      "it reads `" & r.callee & "`, a value built on the dynamic floor"
+    else: "it reads a value built on the dynamic floor"
   of drExplicit:       "it is explicitly marked `dynamic:`"
 
 proc toDiagnostic*(action: ArchBAction, subject: string, site: SourceSite):

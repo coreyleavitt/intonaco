@@ -35,22 +35,25 @@ type
     val: T
     label*: string
 
-  SignalRead* = object of RootEffect
-    ## A tracked signal read, as a Nim `tags` effect (#49). Declared on
-    ## `get`/`()` so `std/effecttraits` reports transitive reads for the
-    ## compile-time classifier's purity gate, and so consumers can write
-    ## `{.forbids: [SignalRead].}` for a context that must not read reactive
-    ## state. `peek` is deliberately untagged — an untracked read creates
-    ## no dependency.
+  ReactiveRead* = object of RootEffect
+    ## A tracked read of reactive state, as a Nim `tags` effect (#49). The
+    ## effect denotes "this code forms a dependency edge" — it is carried by
+    ## EVERY reactive accessor, not just `Signal.get`: `Dynamic.get` declares
+    ## it too, so the classifier's purity gate catches a reactive read hidden
+    ## behind a helper regardless of which reactive type it reads. Consumers
+    ## write `{.forbids: [ReactiveRead].}` for a context that must not read
+    ## reactive state. `peek` is deliberately untagged — an untracked read
+    ## creates no dependency.
 
-  SignalWrite* = object of RootEffect
-    ## A signal write, as a Nim `tags` effect (#49). Injected via the pure
-    ## `setRaw` below — NOT declared on `set`, which also journals + notifies
-    ## and so has unbounded effects (a `tags:[X]` upper bound can't hold).
-    ## A declared tag on the pure `setRaw` injects `SignalWrite` into every
-    ## `set` caller, so `{.forbids: [SignalWrite].}` catches mutation (e.g. a
-    ## render path). `forbids` is surgically precise: carrying the RootEffect
-    ## supertype (which `set` does, via `notify`) does NOT trigger it.
+  ReactiveWrite* = object of RootEffect
+    ## A write to reactive state, as a Nim `tags` effect (#49). Injected via
+    ## the pure `setRaw` below — NOT declared on `set`, which also journals +
+    ## notifies and so has unbounded effects (a `tags:[X]` upper bound can't
+    ## hold). A declared tag on the pure `setRaw` injects `ReactiveWrite` into
+    ## every `set` caller, so `{.forbids: [ReactiveWrite].}` catches mutation
+    ## (e.g. a render path). `forbids` is surgically precise: carrying the
+    ## RootEffect supertype (which `set` does, via `notify`) does NOT trigger
+    ## it.
 
 # --- Signal -----------------------------------------------------------------
 
@@ -67,7 +70,7 @@ proc signal*[T](initial: T, label = ""): Signal[T] =
   let effective = consumeRestoration(label, initial)
   Signal[T](val: effective, label: label)
 
-proc get*[T](s: Signal[T]): T {.gcsafe, tags: [SignalRead].} =
+proc get*[T](s: Signal[T]): T {.gcsafe, tags: [ReactiveRead].} =
   ## Read the current value. When called inside a `createEffect` /
   ## `createComputed` body, registers a dynamic dependency on `s`.
   ## Use `peek` to read without tracking.
@@ -84,11 +87,11 @@ proc peek*[T](s: Signal[T]): T {.gcsafe.} =
 proc `()`*[T](s: Signal[T]): T {.gcsafe.} = s.get()
   ## Sugar — `count()` reads + tracks; same as `count.get()`.
 
-proc setRaw[T](s: Signal[T], v: T) {.gcsafe, raises: [], tags: [SignalWrite].} =
-  ## The raw value mutation, isolated so it can carry the `SignalWrite`
+proc setRaw[T](s: Signal[T], v: T) {.gcsafe, raises: [], tags: [ReactiveWrite].} =
+  ## The raw value mutation, isolated so it can carry the `ReactiveWrite`
   ## effect cleanly (a declared tag injects into callers). `setCore` routes
   ## its store through here, so everything calling `set` transitively carries
-  ## `SignalWrite` — and `{.forbids: [SignalWrite].}` can catch it — even
+  ## `ReactiveWrite` — and `{.forbids: [ReactiveWrite].}` can catch it — even
   ## though `set` itself also journals and notifies (unbounded effects).
   s.val = v
 
@@ -120,7 +123,7 @@ proc setCore[T](s: Signal[T], newVal: T, journal: bool)
     # Effect firewall (cast(tags:[])): journaling is internal substrate
     # bookkeeping (TimeEffect + the journal's RootEffect), not a *reactive*
     # effect of the writing code. Stripping it — together with the observer
-    # firewall in notify — leaves `set` carrying only SignalWrite, so a bare
+    # firewall in notify — leaves `set` carrying only ReactiveWrite, so a bare
     # `RootEffect` in a body's tags cleanly means "the compiler punted"
     # (opacity), never "this wrote a signal." Runtime unchanged.
     {.cast(gcsafe), cast(tags: []).}:

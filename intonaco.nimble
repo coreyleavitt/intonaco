@@ -32,6 +32,19 @@ task test, "run intonaco's standalone tests":
     "tests/test_construct.nim",
     "tests/test_verification.nim",
     "tests/test_convergence.nim",
+    "tests/test_dynamic.nim",
   ]
   for t in tests:
     exec "nim r --hints:off --warnings:off --path:src " & t
+
+task strictcheck, "compile-probe the -d:intonacoStrict guarantees":
+  # A strict error can't live in a file the `test` loop runs, so the
+  # discipline is regression-checked here via the compiler's exit code.
+  const opts = "-d:intonacoStrict --hints:off --warnings:off --path:src "
+  # MUST be a hard error under strict (a dynamic node that escaped detection):
+  for p in ["tests/strict_probe_fail.nim", "tests/dynamic_strict_fail.nim"]:
+    exec "if nim check " & opts & p &
+      "; then echo 'EXPECTED STRICT ERROR: " & p & "'; exit 1; else exit 0; fi"
+  # MUST compile under strict (the explicit escape hatch):
+  for p in ["tests/strict_probe_ok.nim", "tests/dynamic_strict_ok.nim"]:
+    exec "nim check " & opts & p

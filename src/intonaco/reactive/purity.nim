@@ -17,12 +17,12 @@
 ## Analysis only — *policy* lives in the classifier that consumes this.
 
 import std/[macros, effecttraits]
-import ./signal   # SignalRead / SignalWrite tags
+import ./signal   # ReactiveRead / ReactiveWrite tags
 
 type
   ReactiveEffect* = enum
-    reReads   ## transitively reads a signal (SignalRead)
-    reWrites  ## transitively writes a signal (SignalWrite)
+    reReads   ## transitively reads reactive state (ReactiveRead) — any signal or Dynamic
+    reWrites  ## transitively writes reactive state (ReactiveWrite)
 
   Reactivity* = object
     effects*: set[ReactiveEffect]  ## specific reactive effects (sound when not opaque)
@@ -46,14 +46,14 @@ proc reactiveEffects*(n: NimNode): Reactivity {.compileTime.} =
   ## RootEffect therefore reliably means "punted", not "wrote a signal".)
   for t in getTagsList(n):
     case t.repr
-    of "SignalRead": result.effects.incl reReads
-    of "SignalWrite": result.effects.incl reWrites
+    of "ReactiveRead": result.effects.incl reReads
+    of "ReactiveWrite": result.effects.incl reWrites
     of "RootEffect": result.opaque = true
     else: discard
 
 proc forbidsReactive(impl: NimNode): bool {.compileTime.} =
-  ## True if the routine declares `{.forbids: [...].}` listing both SignalRead
-  ## and SignalWrite — a developer-vouched "touches no signal" contract. On an
+  ## True if the routine declares `{.forbids: [...].}` listing both ReactiveRead
+  ## and ReactiveWrite — a developer-vouched "touches no reactive state" contract. On an
   ## `importc` proc this is unverifiable (the C body is invisible) but it's an
   ## explicit, greppable promise the classifier can trust, expressed in the
   ## same effect vocabulary as the read/write levers.
@@ -62,8 +62,8 @@ proc forbidsReactive(impl: NimNode): bool {.compileTime.} =
        pr[0].eqIdent("forbids"):
       var hasR, hasW = false
       for e in pr[1]:
-        if e.eqIdent("SignalRead"): hasR = true
-        elif e.eqIdent("SignalWrite"): hasW = true
+        if e.eqIdent("ReactiveRead"): hasR = true
+        elif e.eqIdent("ReactiveWrite"): hasW = true
       if hasR and hasW: return true
   false
 
@@ -76,7 +76,7 @@ proc ffiOpacity(callee: NimNode, strict: bool): (bool, string) {.compileTime.} =
   ##     through a Nim callback" path.
   ##   - no callback     -> can reach a signal only via a hardcoded Nim
   ##     `exportc` reader (exotic). Trusted by default; under `strict`, must
-  ##     carry `{.forbids: [SignalRead, SignalWrite].}` to stay in the static
+  ##     carry `{.forbids: [ReactiveRead, ReactiveWrite].}` to stay in the static
   ##     fragment.
   if callee.kind != nnkSym: return (false, "")
   let impl = callee.getImpl
@@ -98,7 +98,7 @@ proc ffiOpacity(callee: NimNode, strict: bool): (bool, string) {.compileTime.} =
   if strict:
     return (true, "FFI binding `" & callee.repr &
       "` has no reactive contract; under -d:intonacoStrict, annotate it " &
-      "{.forbids: [SignalRead, SignalWrite].} or wrap the call in dynamic:")
+      "{.forbids: [ReactiveRead, ReactiveWrite].} or wrap the call in dynamic:")
   (false, "")                                            # non-strict trusts it
 
 proc opaqueReactiveCalls*(body: NimNode, strict = false): seq[OpaqueCall]

@@ -42,6 +42,7 @@ type
     drOpaque           ## a call the compiler can't see into (method/async/indirect)
     drForeign          ## an FFI binding that could read a signal through a callback
     drUnscheduledDep   ## depends on a value not resolved at compile time
+    drDynamicValue     ## reads a `Dynamic[T]` — a value built on the runtime floor
     drExplicit         ## explicitly marked `dynamic:` (the escape hatch)
 
   DynReason* = object
@@ -53,17 +54,29 @@ type
     of tStatic:  height*: int
     of tDynamic: reason*: DynReason
 
-proc isSignalTy(node: NimNode): bool {.compileTime.} =
+proc namedReactiveTy(node: NimNode, name: string): bool {.compileTime.} =
+  ## `node`'s instantiated type is `name[...]` (e.g. `Signal[int]`,
+  ## `Dynamic[int]`). Keyed on the type constructor's repr.
   if node == nil or node.kind in {nnkEmpty, nnkNilLit}: return false
   let typ = node.getTypeInst
   typ != nil and typ.kind == nnkBracketExpr and typ.len >= 1 and
-    typ[0].repr == "Signal"
+    typ[0].repr == name
+
+proc isAccessorCall(n: NimNode): bool {.compileTime.} =
+  ## A call to the tracked accessor `()`/`get` (one receiver arg). `peek` is
+  ## excluded (untracked, no dep).
+  n.kind in {nnkCall, nnkCommand} and n.len == 2 and n[0].kind == nnkSym and
+    n[0].repr in ["()", "get"]
 
 proc isSignalRead(n: NimNode): bool {.compileTime.} =
-  ## A tracked read: a call to the accessor `()`/`get` on a signal — keyed on
-  ## the CALLEE, not the arg type. `peek` is excluded (untracked, no dep).
-  n.kind in {nnkCall, nnkCommand} and n.len == 2 and n[0].kind == nnkSym and
-    n[0].repr in ["()", "get"] and isSignalTy(n[1])
+  ## A tracked read of a `Signal[T]` — keyed on the CALLEE, not the arg type
+  ## (which would false-match any helper taking a signal).
+  isAccessorCall(n) and namedReactiveTy(n[1], "Signal")
+
+proc isDynamicRead(n: NimNode): bool {.compileTime.} =
+  ## A tracked read of a `Dynamic[T]` — a value explicitly built on the runtime
+  ## floor. Categorically dynamic: no baked height can rescue a reader of it.
+  isAccessorCall(n) and namedReactiveTy(n[1], "Dynamic")
 
 proc isRoutineCall(n: NimNode): bool {.compileTime.} =
   n.kind in {nnkCall, nnkCommand} and n.len >= 1 and n[0].kind == nnkSym
@@ -83,6 +96,14 @@ proc classify*(body: NimNode, strict = false): Classification {.compileTime.} =
   var reason: DynReason
   proc walk(n: NimNode) =
     if dyn: return
+    if isDynamicRead(n):
+      # The quarantine: a `Dynamic[T]` is height-uncomposable by construction,
+      # so any reader is categorically dynamic — no pragma can rescue it.
+      let recv = n[1]
+      dyn = true
+      reason = DynReason(kind: drDynamicValue,
+        callee: (if recv.kind == nnkSym: recv.repr else: ""))
+      return
     if isSignalRead(n):
       let recv = n[1]
       if recv.kind == nnkSym: deps.add recv          # directly-named -> resolvable

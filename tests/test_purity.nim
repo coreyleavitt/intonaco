@@ -39,7 +39,7 @@ proc readsAndWrites(): int = (s.set(s() + 1); s())
 proc cNoEf(cb: proc(): int): int {.importc: "c_no_ef".}        # callback, NO effectsOf
 proc cWithEf(cb: proc(): int): int {.importc: "c_ef", effectsOf: cb.}
 proc cNoCb(x: cint): cint {.importc: "c_no_cb".}               # no callback, no contract
-proc cVouched(x: cint): cint {.importc: "c_vouch", forbids: [SignalRead, SignalWrite].}
+proc cVouched(x: cint): cint {.importc: "c_vouch", forbids: [ReactiveRead, ReactiveWrite].}
 
 let fnVar: proc(): int = readsSig
 proc usesIndirect(): int = fnVar()                             # indirect (RootEffect)

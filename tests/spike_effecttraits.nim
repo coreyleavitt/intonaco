@@ -1,4 +1,4 @@
-## EXPERIMENT (#49): does tagging `get` with SignalRead actually give the
+## EXPERIMENT (#49): does tagging `get` with ReactiveRead actually give the
 ## classifier what it needs — transitive detection via std/effecttraits,
 ## correct peek/pure exclusion, effectsOf propagation, and FFI conservatism?
 
@@ -9,7 +9,7 @@ let s = signal(0, label = "s")
 
 proc readsSig(): int = s()                       # direct tracked read
 proc readsViaHelper(): int = readsSig() + 1      # transitive (depth 2)
-proc peeksOnly(): int = s.peek()                 # untracked — must NOT be SignalRead
+proc peeksOnly(): int = s.peek()                 # untracked — must NOT be ReactiveRead
 proc pureFn(): int = 21 * 2                       # pure
 proc hof(f: proc(): int): int {.effectsOf: f.} = f()
 proc usesHofWithRead(): int = hof(readsSig)      # effectsOf carries the read
