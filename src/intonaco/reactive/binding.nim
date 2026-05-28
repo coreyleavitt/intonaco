@@ -189,6 +189,35 @@ macro noUndeclaredSignals*(body: typed): untyped =
   walk(body)
   result = body
 
+proc rewriteDepRefs*(node: NimNode, depSyms: openArray[NimNode]): NimNode
+    {.compileTime.} =
+  ## Rewrite every reference inside `node` that resolves (via identity-equal
+  ## `nnkSym` match) to one of the dep syms, replacing it with a fresh
+  ## `nnkIdent` of the same name. The rewritten node is then re-typed in
+  ## scope of the prepended `let dep = dep.peek()` shadows — so the body
+  ## sees the peeked value, not the outer Signal.
+  ##
+  ## Without this, an `effect`/`computed` invoked through a template breaks:
+  ## template substitution resolves the template's typed `Signal[T]` parameter
+  ## to a sym IN the body AST, and the ident-based shadow can't shadow a
+  ## typed sym. Hits the user as e.g. `if boolSig:` seeing Signal[bool]
+  ## instead of bool in `mountWhen`-style wrappers.
+  ##
+  ## Identity comparison (`node == dep`) — NOT name comparison — so a body
+  ## that legitimately introduces an unrelated local with the same name as
+  ## a dep is left untouched.
+  if node.kind == nnkSym:
+    for dep in depSyms:
+      if node == dep:
+        return newIdentNode(node.strVal)
+    return node
+  if node.len == 0:
+    return node
+  result = newNimNode(node.kind)
+  result.copyLineInfo(node)
+  for c in node:
+    result.add rewriteDepRefs(c, depSyms)
+
 # --- The macros (sugar over the primitives + walker + height bake) ----------
 
 macro computedInner(name: untyped, deps: typed, body: untyped,
@@ -209,10 +238,15 @@ macro computedInner(name: untyped, deps: typed, body: untyped,
     let lhs = newIdentNode(if sym.kind == nnkSym: sym.strVal else: $sym)
     shadows.add quote do:
       let `lhs` = `sym`.peek()
+  # Rewrite dep-sym references in the body to fresh idents — required for
+  # bodies arriving via template substitution (the template parameter sym
+  # ends up in the body AST and the ident-shadow doesn't shadow already-
+  # typed syms). See `rewriteDepRefs` for the rationale.
+  let bodyRewritten = rewriteDepRefs(body, depSyms)
   # Wrap ONLY the user's body in `noUndeclaredSignals` — not the shadows
   # (their `let x = x.peek()` legitimately reads the outer Signal once).
   let bodyChecked = quote do:
-    noUndeclaredSignals(`body`)
+    noUndeclaredSignals(`bodyRewritten`)
   var bodyOut = newStmtList()
   for s in shadows: bodyOut.add s
   bodyOut.add bodyChecked
@@ -260,8 +294,10 @@ macro effectInner(deps: typed, body: untyped, origDeps: untyped): untyped =
     let lhs = newIdentNode(if sym.kind == nnkSym: sym.strVal else: $sym)
     shadows.add quote do:
       let `lhs` = `sym`.peek()
+  # See `rewriteDepRefs` rationale in computedInner.
+  let bodyRewritten = rewriteDepRefs(body, depSyms)
   let bodyChecked = quote do:
-    noUndeclaredSignals(`body`)
+    noUndeclaredSignals(`bodyRewritten`)
   var bodyOut = newStmtList()
   for s in shadows: bodyOut.add s
   bodyOut.add bodyChecked
