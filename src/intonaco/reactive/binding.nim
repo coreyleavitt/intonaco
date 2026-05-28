@@ -58,41 +58,48 @@ proc maxDepHeight(deps: openArray[Subscribable]): int =
 
 proc computedC*[T](deps: openArray[Subscribable],
                    body: proc(): T {.closure.},
-                   fixedHeight = -1): Signal[T] =
+                   fixedHeight = -1): Signal[T] {.gcsafe.} =
   ## The runtime primitive under the `computed` macro. Height: `fixedHeight`
   ## if >= 0 (compile-time-baked by the macro), else runtime-composed via
   ## `maxDepHeight`. Subscribes to declared deps only.
-  let h = if fixedHeight >= 0: fixedHeight else: maxDepHeight(deps)
-  let outSig = signal(body())
-  outSig.height = h
-  let comp = Computation(kind: ckComputed, height: h, heightFixed: true)
-  comp.run = proc() =
-    if comp.disposed: return
-    outSig.set(body())
-  for d in deps: subscribe(d, comp)
-  if currentScope != nil:
-    let captured = comp
-    onCleanup proc() =
-      captured.disposed = true
-      unsubscribeAll(captured)
-  outSig
+  ##
+  ## `{.gcsafe.}` is asserted via the single-chronos-dispatcher invariant
+  ## (see fresco/CLAUDE.md non-negotiables): no concurrent thread races
+  ## the subscribe / onCleanup / scope machinery. Matches the discipline
+  ## of the lower-level `createEffect` / `createComputed` in `runtime.nim`.
+  {.cast(gcsafe).}:
+    let h = if fixedHeight >= 0: fixedHeight else: maxDepHeight(deps)
+    let outSig = signal(body())
+    outSig.height = h
+    let comp = Computation(kind: ckComputed, height: h, heightFixed: true)
+    comp.run = proc() =
+      if comp.disposed: return
+      outSig.set(body())
+    for d in deps: subscribe(d, comp)
+    if currentScope != nil:
+      let captured = comp
+      onCleanup proc() =
+        captured.disposed = true
+        unsubscribeAll(captured)
+    outSig
 
 proc effectC*(deps: openArray[Subscribable], body: proc() {.closure.},
-              fixedHeight = -1) =
+              fixedHeight = -1) {.gcsafe.} =
   ## The runtime primitive under the `effect` macro. Same shape as `computedC`,
-  ## side-effect only.
-  let h = if fixedHeight >= 0: fixedHeight else: maxDepHeight(deps)
-  let comp = Computation(kind: ckEffect, height: h, heightFixed: true)
-  comp.run = proc() =
-    if comp.disposed: return
+  ## side-effect only. See `computedC` for the gcsafe discipline.
+  {.cast(gcsafe).}:
+    let h = if fixedHeight >= 0: fixedHeight else: maxDepHeight(deps)
+    let comp = Computation(kind: ckEffect, height: h, heightFixed: true)
+    comp.run = proc() =
+      if comp.disposed: return
+      body()
+    for d in deps: subscribe(d, comp)
     body()
-  for d in deps: subscribe(d, comp)
-  body()
-  if currentScope != nil:
-    let captured = comp
-    onCleanup proc() =
-      captured.disposed = true
-      unsubscribeAll(captured)
+    if currentScope != nil:
+      let captured = comp
+      onCleanup proc() =
+        captured.disposed = true
+        unsubscribeAll(captured)
 
 # --- Ergonomic conversions --------------------------------------------------
 
