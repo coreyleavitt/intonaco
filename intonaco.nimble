@@ -26,6 +26,8 @@ task test, "run intonaco's standalone tests":
     # C-shape static-tier binding layer (post-M1 migration).
     "tests/test_binding.nim",
     "tests/test_binding_template_compose.nim",
+    "tests/test_deferred.nim",
+    "tests/test_mountwhen.nim",
     "tests/test_dynamic_tier.nim",
     # Substrate primitives + concept-layers, shape-agnostic.
     "tests/test_diamond_glitch.nim",

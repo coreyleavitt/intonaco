@@ -154,6 +154,16 @@ macro noUndeclaredSignals*(body: typed): untyped =
         if r and w: return true
     false
   proc walk(n: NimNode) =
+    # Lambda / proc-literal bodies are deferred-execution context — their
+    # reads run later, in a separate reactive frame (e.g. inside a
+    # `runAfterPropagation` closure or a stored callback). Walker discipline
+    # is "all reactive reads from the IMMEDIATE body must be declared." If
+    # a user's helper needs reactive reads, they declare those in its own
+    # binding's bracket. Skipping lambda descent here is what lets opaque-
+    # but-non-reactive substrate work (mountWhen's `spawn` etc.) compose
+    # cleanly through the deferred queue.
+    if n.kind in {nnkLambda, nnkProcDef, nnkFuncDef, nnkDo}:
+      return
     if n.kind == nnkSym:
       let t = n.getTypeInst
       if t != nil and t.kind == nnkBracketExpr and t.len >= 1 and
