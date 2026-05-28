@@ -9,15 +9,20 @@
 ##   - fresco   — terminal frontend (depends on intonaco)
 ##   - sinopia  — planned trace frontend (will depend on intonaco)
 ##
-## Key entry points:
-##   - intonaco/reactive/signal       — Signal[T], createEffect
-##   - intonaco/reactive/scope        — newScope, withScope, dispose
-##   - intonaco/reactive/speculative  — speculative: blocks
+## Key entry points (C-shape substrate):
+##   - intonaco/reactive/binding      — `computed name, [deps]: body` /
+##                                      `effect [deps]: body` macros + walker
+##   - intonaco/reactive/dynamic      — `Dynamic[T]` + `dynamic name: body` macro
+##   - intonaco/reactive/each         — `eachItem` over `CollectionSignal`
+##   - intonaco/reactive/signal       — `Signal[T]` + `signals:` macro
+##   - intonaco/reactive/collection   — `CollectionSignal[T]`
+##   - intonaco/reactive/derive       — `derive` / `keep` / `fold` (collection algebra)
+##   - intonaco/reactive/scan         — `scan` (collection delta fold)
+##   - intonaco/reactive/scope        — `newScope` / `withScope` / `dispose`
+##   - intonaco/reactive/speculative  — `speculative:` blocks
 ##   - intonaco/reactive/animation    — tween / spring / frame clock
-##   - intonaco/reactive/collection   — CollectionSignal[T]
-##   - intonaco/reactive/context      — provide T: v / use T
+##   - intonaco/reactive/context      — `provide T: v` / `use T`
 ##   - intonaco/reactive/capabilities — cap concept primitives
-##   - intonaco/reactive/static_graph — tracked: macro
 ##   - intonaco/task/core             — task primitive + spawn variants
 ##   - intonaco/task/supervisor       — supervisor: macro + strategies
 ##   - intonaco/task/parallel         — parallel: structured concurrency
