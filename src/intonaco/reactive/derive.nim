@@ -1,5 +1,4 @@
-## `derive`/`keep`/`fold` — the classified, height-baked collection-transform
-## macros.
+## `derive` / `keep` / `fold` — height-baked collection-transform macros.
 ##
 ## `derive(c, f)` is a read-only reactive collection whose value is, by
 ## definition, `c.get().map(f)` — a pure dataflow node (it sits in the Lean
@@ -9,18 +8,21 @@
 ## wholesale map; that equivalence is the proof obligation, one lemma per
 ## `DeltaKind`.
 ##
-## Each macro enforces purity (linearity) and bakes a compile-time height, then
-## emits its value-constructed floor (`mapped`/`filtered`/`folded`, in
-## `reactive/deltafloor`) via `bindSym`. The floor procs are imported here only
-## so `bindSym` can name them — they are NOT re-exported, so a consumer importing
-## `derive` gets the macros, never the unclassified floor (see `test_surface`).
+## Each macro enforces purity (linearity) via the C-shape walker
+## (`noUndeclaredSignals` from `binding`) applied to the function's body, and
+## bakes a compile-time height, then emits its value-constructed floor
+## (`mapped` / `filtered` / `folded`, in `reactive/deltafloor`) via `bindSym`.
+##
+## A signal-dependent function makes the operator bilinear (a join), which is
+## deliberately out of scope — for cross-signal transforms, use a `computed`
+## (`c.get()` then transform) or apply at the render layer.
 
 {.experimental: "callOperator".}
 
 import std/[macros, options]
-import ./deltafloor   # mapped / filtered / folded — named by bindSym, not re-exported
+import ./deltafloor   # mapped / filtered / folded — named by bindSym
 import ./height
-import ./classify
+import ./binding      # noUndeclaredSignals (the walker)
 
 proc sourceHeight(coll: NimNode): int {.compileTime.} =
   ## The compile-time height of a `derive` source. A `CollectionSignal[_]` is
@@ -35,31 +37,24 @@ proc sourceHeight(coll: NimNode): int {.compileTime.} =
   error("derive: `" & coll.repr & "` is not a statically-resolvable collection " &
         "source (a plain `collection()` or a named `derive` result)", coll)
 
-proc requirePure(fn: NimNode, op: string) {.compileTime.} =
-  ## Reject a function argument that reads reactive state. The collection
-  ## operators (`map`/`filter`) are LINEAR — `op(c ⊕ δ) = op(c) ⊕ op(δ)` — which
-  ## is what makes incremental == apply-to-delta sound; a signal-dependent
-  ## function makes it bilinear (a join), out of scope. Classify the function's
-  ## BODY — for a named proc, via `getImpl` — so reads are caught TRANSITIVELY
-  ## (through helper procs), not just in an inline lambda.
-  let body =
-    if fn.kind in {nnkLambda, nnkProcDef, nnkFuncDef}: fn.body
-    elif fn.kind == nnkSym and fn.getImpl.kind in {nnkProcDef, nnkFuncDef}: fn.getImpl.body
-    else: fn
-  let cls = classify(body)
-  if cls.tier == tDynamic or (cls.tier == tStatic and cls.height > 0):
-    error(op & ": the function reads reactive state — collection operators are " &
-          "linear (pure). For a signal-dependent transform use a `computed` " &
-          "(`c.get()` then transform) or apply it at the render layer; a " &
-          "collection×signal transform is a join, deliberately out of scope.", fn)
+proc fnBody(fn: NimNode): NimNode {.compileTime.} =
+  ## Extract the body of a function argument for the walker. Inline lambdas
+  ## and proc defs expose their body directly; a named proc symbol needs
+  ## `getImpl` to reach the body (so transitive reads through helpers are
+  ## also walker-checked).
+  if fn.kind in {nnkLambda, nnkProcDef, nnkFuncDef}: return fn.body
+  if fn.kind == nnkSym and fn.getImpl.kind in {nnkProcDef, nnkFuncDef}:
+    return fn.getImpl.body
+  fn
 
 proc transformBinding(name, coll, fn, floor: NimNode, op: string): NimNode
     {.compileTime.} =
-  ## Shared emission for the linear collection-transform macros: enforce purity,
-  ## resolve+compose the source height at compile time, bake it onto `name`, and
-  ## emit `floor(coll, fn, fixedHeight = h)`. So the binding is in the static
-  ## fragment and downstream transforms compose through its baked height.
-  requirePure(fn, op)
+  ## Shared emission for the linear collection-transform macros: walker-check
+  ## the function for purity (at THIS macro's compile time via `getAst`, so no
+  ## runtime trace), resolve+compose the source height, bake it onto `name`,
+  ## and emit `floor(coll, fn, fixedHeight = h)`.
+  let body = fnBody(fn)
+  discard getAst(noUndeclaredSignals(body))    # walker fires at sem; errors localize
   let h = sourceHeight(coll) + 1
   let ctor = newCall(floor, coll, fn,
     nnkExprEqExpr.newTree(ident"fixedHeight", newLit(h)))

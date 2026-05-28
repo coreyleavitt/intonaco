@@ -34,13 +34,8 @@ task test, "run intonaco's standalone tests":
     "tests/test_verification.nim",
     "tests/test_convergence.nim",
     "tests/test_collection.nim",
-    # Legacy A-shape tests broken by M1 deletes — M2 will either rewrite or delete.
-    # See `docs/rfc-c-shape-migration.md` M2 phase + the M2 punch list in the
-    # commit message of `e... [M1] ...`.
-    # "tests/test_surface.nim",     # imports construct (deleted)
-    # "tests/test_dynamic.nim",     # imports classify (deleted)
-    # "tests/test_scan.nim",        # imports construct (deleted); scan macro pending rewrite
-    # "tests/test_derive.nim",      # derive.nim imports classify (deleted); macros pending rewrite
+    "tests/test_derive.nim",
+    "tests/test_scan.nim",
   ]
   for t in tests:
     exec "nim r --hints:off --warnings:off --path:src " & t

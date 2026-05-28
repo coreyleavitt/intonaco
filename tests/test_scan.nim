@@ -9,11 +9,11 @@
 
 import std/[unittest, macros, options]
 import intonaco/reactive/collection
-import intonaco/reactive/deltafloor    # deltas / foldDeltas (the floor — tests fold directly)
+import intonaco/reactive/deltafloor    # deltas / foldDeltas (floor — tests use it directly)
 import intonaco/reactive/signal
-import intonaco/reactive/construct
-import intonaco/reactive/dynamic
+import intonaco/reactive/dynamic       # dynamicEffect (for the floor-glue tests)
 import intonaco/reactive/height
+import intonaco/reactive/binding       # `computed` / `signals:` / `collections:` re-exports
 import intonaco/reactive/scan
 
 macro heightLit(sym: typed): int =
@@ -46,7 +46,7 @@ suite "collections: bakes a compile-time source height":
     check heightLit(clog) == 0
     check clog.get() == @[1, 2]
 
-scan totalLog, clog, 0, proc(acc: int, d: Delta[int]): int =
+scan totalLog, clog, [], 0, proc(acc: int, d: Delta[int]): int =
   if d.kind == dkInsert: acc + d.insertVal else: acc
 
 suite "scan macro — static, height-baked collection fold":
@@ -57,13 +57,14 @@ suite "scan macro — static, height-baked collection fold":
 
 signals:
   base = 5
-computed mult: base() * 2      # height 1
+computed mult, [base]:
+  base * 2                      # height 1
 
-scan scaled, clog, 0, proc(acc: int, d: Delta[int]): int =
-  if d.kind == dkInsert: acc + d.insertVal * mult() else: acc
+scan scaled, clog, [mult], 0, proc(acc: int, d: Delta[int]): int =
+  if d.kind == dkInsert: acc + d.insertVal * mult else: acc
 
-suite "scan macro — composes the step's signal-read heights":
-  test "5. a step reading a height-1 computed lifts scan to height 2":
+suite "scan macro — composes the step's declared deps into its height":
+  test "5. a step declaring a height-1 dep lifts scan to height 2":
     check heightLit(scaled) == 2
 
 # Diamond: dsrc -> dmid (h1) -> dhi (h2); plus an effect pushing dsrc into a
@@ -76,14 +77,16 @@ collections:
   dc = newSeq[int]()
 signals:
   dsrc = 0
-computed dmid: dsrc() + 0      # h1
-computed dhi: dmid() + 0       # h2
+computed dmid, [dsrc]:
+  dsrc + 0                     # h1
+computed dhi, [dmid]:
+  dmid + 0                     # h2
 dynamicEffect(proc() = dc.push(dsrc()))   # pushes on dsrc change (floor glue)
 
 var observed: seq[int]
-scan dprobe, dc, 0, proc(acc: int, d: Delta[int]): int =
+scan dprobe, dc, [dhi], 0, proc(acc: int, d: Delta[int]): int =
   if d.kind == dkInsert:
-    observed.add dhi()
+    observed.add dhi
     acc + 1
   else: acc
 
@@ -96,12 +99,12 @@ suite "scan macro — the baked height drives glitch-free scheduling":
 suite "scan macro — refuses what it can't schedule statically":
   test "7. a non-baked collection (plain ctor) is a compile error":
     let plain = collection[int](@[])   # no {.height.} — not via collections:
-    check not compiles(scan(bad7, plain, 0,
+    check not compiles(scan(bad7, plain, [], 0,
       proc(acc: int, d: Delta[int]): int = acc))
   test "8. a runtime-keyed step is a compile error":
     let sigs = @[signal(1), signal(2)]
     let idx = signal(0)
-    check not compiles(scan(bad8, clog, 0,
+    check not compiles(scan(bad8, clog, [], 0,
       proc(acc: int, d: Delta[int]): int = acc + sigs[idx()]()))
 
 # A collection mutated from inside an in-flight propagation (an effect on
@@ -112,7 +115,7 @@ collections:
   nc = newSeq[int]()
 signals:
   trig = 0
-scan ncount, nc, 0, proc(acc: int, d: Delta[int]): int =
+scan ncount, nc, [], 0, proc(acc: int, d: Delta[int]): int =
   if d.kind == dkInsert: acc + 1 else: acc
 dynamicEffect(proc() = (if trig() > 0: nc.push(trig())))
 

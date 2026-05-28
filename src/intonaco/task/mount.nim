@@ -1,42 +1,48 @@
-## Reactive conditional mount: `mountWhen(cond): body`.
+## Reactive conditional mount: `mountWhen(boolSig): body`.
 ##
-## While `cond` evaluates truthy, the body (which produces a Mount —
-## typically `spawn child()`) is kept alive. When `cond` flips false,
-## the current Mount is cancelled. When it flips true again, a fresh
-## Mount is spawned. On scope dispose, the active Mount is cancelled
-## together with the rest of the cleanup chain.
+## While `boolSig` evaluates to `true`, the body (which produces a Mount —
+## typically `spawn child()`) is kept alive. When the signal flips to false,
+## the current Mount is cancelled. On a true flip after a cancel, a fresh
+## Mount is spawned. On scope dispose, the active Mount is cancelled along
+## with the rest of the cleanup chain.
 ##
-##   mountWhen(showHelp()):
-##     spawn helpOverlay()
+## ## Shape
 ##
-##   mountWhen(active() and depth() < 10):
+##   let active = signal(false)
+##   mountWhen(active):
 ##     spawn worker()
+##
+## For compound conditions, compose via a `computed`:
+##
+##   computed shouldRun, [active, depth]:
+##     active and depth < 10
+##   mountWhen(shouldRun):
+##     spawn worker()
+##
+## Under the C-shape direction, `boolSig` is the single declared dependency —
+## the explicit-deps discipline (no auto-tracking of arbitrary `cond` reads)
+## means compound conditions get their own named binding. The mount logic
+## itself rides on the existing `effect [boolSig]: ...` macro from `binding`.
 
 import chronos/contextvars
+import intonaco/reactive/signal
 import intonaco/reactive/scope
-import intonaco/reactive/runtime   # createEffect (the internal floor)
+import intonaco/reactive/binding   # effect macro
 import ./core
 
-template mountWhen*(cond: untyped, body: untyped): untyped =
-  ## Reactive conditional mount. `cond` is re-evaluated whenever any
-  ## signal it reads changes; `body` must yield a Mount when the
-  ## condition is true.
+template mountWhen*(boolSig: Signal[bool], body: untyped): untyped =
+  ## Mount `body` (which must produce a `Mount`) while `boolSig` is true.
   ##
-  ## Also exposed as `mount(cond): body` — same semantics, terser
-  ## DSL form. Pick whichever reads better at the call site.
-  ##
-  ## The effect body fires from `notify`, not from any task — the
-  ## dispatcher's `currentScope` at that point is whatever the last
-  ## coroutine left behind (often nil). We capture the registering
-  ## scope's context here and restore it around the effect body so
-  ## `spawn`s inside `body` parent to the right place and journal
-  ## events attribute to the right task.
+  ## The effect body fires from `notify`, not from any task — the dispatcher's
+  ## `currentScope` at that point is whatever the last coroutine left behind
+  ## (often nil). We capture the registering scope's context here and restore
+  ## it around the effect body so `spawn`s inside `body` parent to the right
+  ## place and journal events attribute to the right task.
   let mountWhenCtx = currentContext()
   var currentMount: Mount = nil
-  createEffect proc() =
+  effect [boolSig]:
     withContext(mountWhenCtx):
-      let shouldMount = cond
-      if shouldMount:
+      if boolSig:                       # shadowed inside the effect body
         if currentMount == nil or currentMount.future.finished:
           currentMount = body
       else:
@@ -48,7 +54,7 @@ template mountWhen*(cond: untyped, body: untyped): untyped =
       currentMount.cancel()
       currentMount = nil
 
-template mount*(cond: untyped, body: untyped): untyped =
-  ## DSL-form alias for `mountWhen`. `mount(cond): body` reads as
-  ## "mount this child when cond is true."
-  mountWhen(cond, body)
+template mount*(boolSig: Signal[bool], body: untyped): untyped =
+  ## DSL-form alias for `mountWhen`. `mount(active): spawn child()` reads as
+  ## "mount this child when active is true."
+  mountWhen(boolSig, body)
