@@ -71,6 +71,102 @@ theorem memSuccLe {α : Type} (h : α → Nat) :
     · exact Nat.le_max_left _ _
     · exact Nat.le_trans (ih u hmem) (Nat.le_max_right _ _)
 
+/- ===================================================================== -/
+/- intonaco#62 — DERIVING `statLaw` from the classifier's two obligations. -/
+/- `statLaw` is currently an asserted field of `RGraph`. The substrate     -/
+/- actually MAINTAINS it: the compile-time classifier (a) OVER-collects     -/
+/- the read-set (the baked dep set `D` is a superset of what the body       -/
+/- reads) and (b) bakes `1 + maxSucc heightOf D` with each collected dep's  -/
+/- height itself sound. The two `maxSucc` monotonicity lemmas below reduce   -/
+/- `statLaw` to exactly those two preconditions.                            -/
+
+/-- **`maxSucc` monotone in the dependency list (subset).** If every element of
+    `l₁` also occurs in `l₂`, then `maxSucc h l₁ ≤ maxSucc h l₂`. A dropped or
+    permuted dep can only lower the max. Built on `memSuccLe`. -/
+theorem maxSucc_mono_subset {α : Type} (h : α → Nat) :
+    ∀ (l₁ l₂ : List α), (∀ x, x ∈ l₁ → x ∈ l₂) → maxSucc h l₁ ≤ maxSucc h l₂ := by
+  intro l₁
+  induction l₁ with
+  | nil => intro l₂ _; exact Nat.zero_le _
+  | cons x xs ih =>
+    intro l₂ hsub
+    -- `maxSucc h (x :: xs) = max (h x + 1) (maxSucc h xs)`; bound both sides.
+    apply Nat.max_le.mpr
+    refine ⟨?_, ?_⟩
+    · exact memSuccLe h l₂ x (hsub x (List.mem_cons.mpr (Or.inl rfl)))
+    · exact ih l₂ (fun y hy => hsub y (List.mem_cons.mpr (Or.inr hy)))
+
+/-- **`maxSucc` pointwise monotone in the height function.** If `h₁ x ≤ h₂ x`
+    for every element of the list, then `maxSucc h₁ l ≤ maxSucc h₂ l`. The bound
+    is required only on `l`'s elements because `maxSucc … l` depends on nothing
+    else — that membership-aware form is what `overApproxSound` needs. A short
+    list induction. -/
+theorem maxSucc_mono_height {α : Type} (h₁ h₂ : α → Nat) :
+    ∀ (l : List α), (∀ x, x ∈ l → h₁ x ≤ h₂ x) → maxSucc h₁ l ≤ maxSucc h₂ l := by
+  intro l
+  induction l with
+  | nil => intro _; exact Nat.le_refl _
+  | cons x xs ih =>
+    intro hle
+    simp only [maxSucc]
+    have hx : h₁ x + 1 ≤ h₂ x + 1 :=
+      Nat.succ_le_succ (hle x (List.mem_cons.mpr (Or.inl rfl)))
+    have hxs : maxSucc h₁ xs ≤ maxSucc h₂ xs :=
+      ih (fun y hy => hle y (List.mem_cons.mpr (Or.inr hy)))
+    apply Nat.max_le.mpr
+    exact ⟨Nat.le_trans hx (Nat.le_max_left _ _),
+           Nat.le_trans hxs (Nat.le_max_right _ _)⟩
+
+/-- **Over-approximation soundness (intonaco#62, the headline).** The compile-time
+    classifier may bake the *static* height from an OVER-collected dependency set
+    `D` (`readset ⊆ D` — every dep actually read is captured, plus possibly more
+    from non-taken branches) using collected heights `heightOf` that themselves
+    over-approximate the true heights (`heightOf d ≥ trueHeight d`). Then the
+    baked height `1 + maxSucc heightOf D` dominates the EXACT height
+    `maxSucc trueHeight readset` that a dynamic re-evaluation would assign — i.e.
+    the over-approximation property (`statLaw`'s `≥`) holds *by construction*.
+
+    This reduces the asserted `statLaw` field to two clearly-named obligations
+    the classifier discharges: the walk over-collects, and dep heights are sound.
+
+    `D` and `readset` range over an arbitrary node type `Node`; `heightOf` and
+    `trueHeight` are arbitrary height assignments. -/
+theorem overApproxSound {Node : Type}
+    (heightOf trueHeight : Node → Nat) (D readset : List Node)
+    (hCover : ∀ x, x ∈ readset → x ∈ D)               -- walk OVER-collects
+    (hSound : ∀ d, d ∈ D → trueHeight d ≤ heightOf d)  -- collected heights sound
+    : maxSucc trueHeight readset ≤ 1 + maxSucc heightOf D := by
+  -- shrink the dep list (readset ⊆ D) under the TRUE heights …
+  have hsubset : maxSucc trueHeight readset ≤ maxSucc trueHeight D :=
+    maxSucc_mono_subset trueHeight readset D hCover
+  -- … then lift the height function pointwise (true ≤ collected) on `D`.
+  have hheight : maxSucc trueHeight D ≤ maxSucc heightOf D :=
+    maxSucc_mono_height trueHeight heightOf D hSound
+  -- chain, then `maxSucc heightOf D ≤ 1 + maxSucc heightOf D` closes the gap.
+  omega
+
+/-- **Composition corollary for the linear collection operators.** The
+    `derive`/`keep`/`fold` operators (intonaco's collection algebra) are
+    single-source and bake `sourceHeight + 1`. Modelled in the abstract node
+    graph, such an operator node `v` has a singleton dep list `[src]` and baked
+    height `g.h src + 1`. Then the over-approximation property holds *exactly*
+    (with equality, not just `≥`): there is no slack to verify, because a linear
+    single-source operator collects precisely its one source.
+
+    This is the faithful statement against the existing abstract model:
+    `maxSucc g.h [src] = max (g.h src + 1) 0 = g.h src + 1`, which is the baked
+    height verbatim. A larger operator model (separate `Op` syntax, an evaluator
+    relating operator output to source values) would be needed to *also* prove
+    the operators preserve glitch-freedom of their stream contents; that is out
+    of scope here — this corollary only discharges the HEIGHT obligation
+    (`statLaw`) that #62 is about, which is all the scheduler proof consumes. -/
+theorem linearOpStatLaw (g : RGraph) (v src : g.Node)
+    (hdeps : g.deps v = [src]) (hbaked : g.h v = g.h src + 1) :
+    g.h v ≥ maxSucc g.h (g.deps v) := by
+  rw [hdeps, hbaked]
+  simp only [maxSucc]   -- maxSucc g.h [src] = max (g.h src + 1) 0
+  omega
+
 /-- **Lemma B (cross-tier height monotonicity).** For every edge `u → v`
     (i.e. `u ∈ deps v`), `h u < h v` — regardless of which tiers `u` and `v`
     are in. This is what makes the height order a topological order across the
@@ -368,6 +464,10 @@ theorem worklistCorrect (g : RGraph) :
       exact hw' ((List.mem_erase_of_ne hw'm).mpr hw'd)
 
 -- Attestation: the proofs are axiom-clean (no `sorryAx`).
+#print axioms maxSucc_mono_subset
+#print axioms maxSucc_mono_height
+#print axioms overApproxSound
+#print axioms linearOpStatLaw
 #print axioms lemmaB
 #print axioms oracleFixpoint
 #print axioms confluence
