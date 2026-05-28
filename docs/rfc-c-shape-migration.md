@@ -74,7 +74,7 @@ one. No parallel paths, no compat shims.
 
 | Module / file | Replacement |
 |---|---|
-| `src/intonaco/reactive/signal.nim` macro layer | New C-shape `signals:` macro for source declaration (already exists; pragma-bake survives). Auto-tracking `Signal.get`'s `trackRead` is **removed** (`get` becomes equivalent to `peek` for the C-shape, retaining the `ReactiveRead` tag for walker detection only — the tag's role shifts from "edge formation" to "transitive-read detection in the walker"). |
+| `src/intonaco/reactive/signal.nim` macro layer | The `signals:` macro is preserved (pragma-bake is the C-shape's source-declaration mechanism). `Signal.get`'s `trackRead` is **kept** — the dynamic tier depends on it (`dynamicComputed` builds on `createEffect` and relies on `get`'s tracking to register the auto-tracked deps inside the body). The walker is what prevents accidental edges in static bodies: a `Signal[_]`-typed sym anywhere in a static binding's body is rejected at sem time, *before* runtime tracking could fire. (Original RFC text said "strip `trackRead`"; that would have broken the dynamic tier. Revised during M1.) |
 | `src/intonaco/reactive/construct.nim` (`computed:` / `effect:` / `dynamic:` macros) | Rewritten as the C-shape `computed name, [deps]: body` / `effect [deps]: body` / `dynamic name: body` macros. Implementation lifted from `fresco/tests/c_shape_lib.nim`. |
 | `src/intonaco/reactive/derive.nim` (`derive` / `keep` / `fold` macros) | Same operator semantics, same delta machinery; macros rewritten to the C-shape syntax. The underlying floor (`mapped`/`filtered`/`folded`) stays. |
 | `src/intonaco/reactive/scan.nim` (`scan` macro) | Same. |

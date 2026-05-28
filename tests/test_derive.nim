@@ -10,9 +10,10 @@ import std/[unittest, sequtils, macros, options]
 import intonaco/reactive/collection
 import intonaco/reactive/deltafloor    # onDelta + the value-constructed floor procs
 import intonaco/reactive/signal
-import intonaco/reactive/runtime
+import intonaco/reactive/runtime       # createEffect (the floor — tests use it directly)
 import intonaco/reactive/speculative
 import intonaco/reactive/height
+import intonaco/reactive/binding       # `computed` / `effect` / `signals:`
 import intonaco/reactive/derive
 
 macro heightLit(sym: typed): int =

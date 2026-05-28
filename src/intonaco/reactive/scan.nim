@@ -7,42 +7,96 @@
 ## `c` is compile-time-visible and height-ordered), and folds each typed delta
 ## into an accumulator — O(1) per delta, no whole-seq re-read.
 ##
-## This is the engine under fresco's differential collection bindings. The
-## value/event duality is explicit: `deltas(c)` is `c`'s event face, at `c`'s
-## height; a `scan` over it sits one height above, like any derived node.
+## ## Shape
+##
+##   scan name, coll, [extraDeps], initial, step
+##
+## The `[extraDeps]` bracket is **mandatory** (use `[]` for no extra deps). It
+## lists every Signal / Dynamic the step body reads beyond the delta arg, so
+## the scan composes its height correctly (`max(coll.height+1, max(deps)+1)`)
+## and so the walker can verify the step is otherwise pure. Inside the step
+## body, the deps are shadowed as their peek'd values — `myWeight` in the
+## body is `int`, not `Signal[int]`. The walker rejects any reactive read in
+## the body that isn't covered by the bracket.
+##
+## Two-macro pattern (outer untyped → inner typed) so the shadow `let`s in the
+## step body lexically precede the body's existing references, letting them
+## resolve to the local value bindings instead of the outer Signal-typed syms.
 
 {.experimental: "callOperator".}
 
 import std/[macros, options]
-import ./deltafloor   # deltas / foldDeltas — named by bindSym, not re-exported
+import ./deltafloor   # deltas / foldDeltas — named by bindSym
 import ./height
-import ./classify
+import ./subscribable # `Subscribable` — bindSym'd into the homogenization wrapping
+import ./binding      # noUndeclaredSignals
 
-macro scan*(name: untyped, coll: typed, initial: typed, step: typed): untyped =
-  ## Declare a static, height-baked fold over a collection's delta stream — the
-  ## blessed form (the floor is `foldDeltas`). The collection must carry a
-  ## compile-time height (declare it via `collections:`), so the binding's
-  ## dependency on it is compile-time-verified rather than a silent runtime
-  ## escape. Bakes `{.height: h(coll)+1.}` onto `name` so downstream nodes
-  ## compose through it.
+proc unwrapConv(n: NimNode): NimNode {.compileTime.} =
+  ## Walk through implicit-conversion wrappers down to the sym.
+  result = n
+  while result.kind in {nnkHiddenCallConv, nnkHiddenStdConv, nnkConv} and
+        result.len >= 2:
+    result = result[1]
+
+macro scanInner(name: untyped, coll: typed, deps: typed,
+                initial: typed, step: typed,
+                origDeps: untyped): untyped =
+  ## Inner typed-arg macro. `deps` arrives as a typed bracket of
+  ## `Subscribable(<sym>)` calls; we extract syms for heightOf, compose the
+  ## scan's height, and emit the `foldDeltas` call with `fixedHeight` baked.
+  ## The shadow `let`s on the step body were prepended by the outer macro.
   let ch = heightOf(coll)
   if ch.isNone:
-    error("scan: `" & coll.repr & "` has no compile-time height — declare the " &
-          "collection via `collections:` so its dependency can be scheduled " &
-          "statically (or use the `foldDeltas` floor for a dynamic fold)", coll)
-  # The scan depends on the collection AND on every signal the step reads.
-  # Classify the step body to fold those reads into the height; an unresolvable
-  # read can't be scheduled statically.
-  let stepBody = if step.kind in {nnkLambda, nnkProcDef, nnkFuncDef}: step.body
-                 else: step
-  let cls = classify(stepBody)
-  if cls.tier == tDynamic:
-    error("scan: the step reads reactive state that can't be scheduled " &
-          "statically (" & $cls.reason.kind & ") — restructure the read, or " &
-          "use the `foldDeltas` floor", step)
-  let h = max(ch.get + 1, cls.height)   # collection dep vs the step's read deps
-  let ctor = newCall(bindSym"foldDeltas",
-    newCall(bindSym"deltas", coll), initial, step,
-    nnkExprEqExpr.newTree(ident"fixedHeight", newLit(h)))
-  nnkLetSection.newTree(nnkIdentDefs.newTree(
-    withHeight(name, h), newEmptyNode(), ctor))
+    error("scan: `" & coll.repr & "` has no compile-time height — declare " &
+          "the collection via `collections:`", coll)
+  var h = ch.get + 1
+  for d in deps:
+    var sym = d
+    if sym.kind in {nnkCall, nnkHiddenCallConv, nnkHiddenStdConv, nnkConv} and
+       sym.len >= 2:
+      sym = sym[^1]
+    sym = unwrapConv(sym)
+    let dh = heightOf(sym)
+    if dh.isNone:
+      error("scan: dep `" & sym.repr & "` has no compile-time height — " &
+            "declare the source via `signals:` / `collections:`", sym)
+    if dh.get + 1 > h: h = dh.get + 1
+  let hLit = newLit(h)
+  let ctor = quote do:
+    foldDeltas(deltas(`coll`), `initial`, `step`, fixedHeight = `hLit`)
+  result = nnkLetSection.newTree(
+    nnkIdentDefs.newTree(withHeight(name, h), newEmptyNode(), ctor))
+
+macro scan*(name: untyped, coll: untyped, deps: untyped,
+            initial: untyped, step: untyped): untyped =
+  ## C-shape `scan name, coll, [deps], initial, step`. The deps bracket is
+  ## mandatory (use `[]` for none). Walker enforces purity over anything in
+  ## the step body not covered by `deps`.
+  expectKind(deps, nnkBracket)
+  expectKind(step, {nnkLambda, nnkProcDef, nnkFuncDef})
+  # Build the shadow `let`s that prepend the step body so the body's existing
+  # `dep` references can re-resolve to local value bindings. Fresh nnkIdents
+  # on the LHS so Nim's "reintroduced symbol" check doesn't trip; RHS uses
+  # the untyped dep ident which resolves to the outer Signal-typed sym.
+  var shadows = newStmtList()
+  for d in deps:
+    let lhs = newIdentNode($d)
+    shadows.add quote do:
+      let `lhs` = `d`.peek()
+  # Wrap the (already-shadowed) body in `noUndeclaredSignals` so the walker
+  # fires at sem time on anything still reactive-typed (i.e. NOT declared in
+  # the bracket).
+  let origBody = step.body
+  step.body = newStmtList()
+  for s in shadows: step.body.add s
+  step.body.add quote do:
+    noUndeclaredSignals(`origBody`)
+  # Homogenize deps bracket for the inner typed-arg sem-check. `bindSym` ties
+  # the name to scan.nim's import — emitted code resolves regardless of what
+  # the consumer module imported.
+  let subSym = bindSym"Subscribable"
+  var wrappedDeps = nnkBracket.newTree()
+  for d in deps:
+    wrappedDeps.add nnkCall.newTree(subSym, d)
+  result = quote do:
+    scanInner(`name`, `coll`, `wrappedDeps`, `initial`, `step`, `deps`)

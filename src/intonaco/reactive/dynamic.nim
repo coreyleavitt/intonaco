@@ -1,20 +1,30 @@
-## Dynamic[T] — the value-construction escape to the runtime floor.
+## Dynamic[T] — the type-quarantined escape to the runtime floor.
 ##
-## The blessed reactive surface is the `computed` / `effect` macros, which
-## classify their body at compile time and schedule the static fragment
-## glitch-free. But some nodes are built from a `proc()` VALUE (a factory, a
-## closure assembled at runtime) whose reads the compiler cannot see. Those
-## are categorically dynamic. `dynamicComputed` / `dynamicEffect` are their
-## sanctioned constructors, and `Dynamic[T]` is the output type.
+## The static-tier bindings (`computed` / `effect` in `binding.nim`) declare
+## their deps explicitly and compose heights at compile time. But some nodes
+## are built from a `proc()` VALUE — a factory, a closure assembled at
+## runtime — whose read-set isn't a fixed compile-time list. Those are the
+## dynamic tier.
 ##
-## `Dynamic[T]` is height-uncomposable BY CONSTRUCTION: the classifier treats
-## any read of a `Dynamic[T]` as a dynamic dependency, so a `computed` reading
-## one can never bake a static height (and so never glitch by under-counting).
-## This is the type-level quarantine — the escape is explicit, greppable, and
-## cannot masquerade as statically scheduled.
+## The shape:
+##   * `Dynamic[T]` is the type that carries the dynamic-ness through the
+##     type system. Any binding that reads one is itself in the dynamic tier;
+##     the `binding` module's walker rejects a `Dynamic[_]`-typed reference
+##     in a static body at sem time.
+##   * `dynamicComputed` / `dynamicEffect` are the runtime-floor constructors,
+##     auto-tracking reads via the existing `createEffect` machinery.
+##   * `dynamic name: body` is the macro form — `let name = dynamicComputed(...)`.
+##
+## `Dynamic[T]` is height-uncomposable by construction: the value never
+## carries a baked `{.height.}` pragma, so a static `computed` declaring it
+## as a dep gets `composeHeight = none` and either falls to runtime under
+## relaxed mode or errors under `-d:intonacoStrict`. The escape is explicit,
+## greppable (the user wrote `dynamic name: ...`), and cannot masquerade as
+## statically scheduled.
 
 {.experimental: "callOperator".}
 
+import std/macros
 import ./subscribable   # Subscribable / trackRead / notify / ReactiveRead
 import ./runtime        # createEffect (the internal floor)
 
@@ -24,10 +34,9 @@ type
 
 proc get*[T](d: Dynamic[T]): T {.gcsafe, tags: [ReactiveRead].} =
   ## Read the current value, registering a dependency on the current
-  ## Computation. Carries `ReactiveRead` (like `Signal.get`) so the classifier
-  ## catches a Dynamic read hidden behind a helper. A reader inside a `computed`
-  ## body is forced to the dynamic tier — directly via the classifier's
-  ## `drDynamicValue`, transitively via the reactive-read effect.
+  ## Computation. Carries `ReactiveRead` (like `Signal.get`) so the static-tier
+  ## walker catches a Dynamic read hidden behind a helper — directly via the
+  ## type-walk (Dynamic[_] sym), transitively via the reactive-read effect tag.
   trackRead(d)
   d.val
 
@@ -57,3 +66,25 @@ proc dynamicEffect*(body: proc() {.closure.}): Computation {.discardable.} =
   ## signal's change, and is torn down with the current scope. Returns the
   ## Computation handle for lifecycle control.
   createEffect(body)
+
+# --- The macro sugar -------------------------------------------------------
+
+macro dynamic*(name: untyped, body: untyped): untyped =
+  ## `dynamic name: body` desugars to `let name = dynamicComputed(proc(): auto = body)`.
+  ##
+  ## The body runs on the runtime floor with auto-tracking: reads via `.get()`
+  ## / `()` register edges to the underlying signals; reads via `.peek()` do
+  ## not. The result is `Dynamic[T]`, propagating the dynamic-ness through
+  ## the type system.
+  ##
+  ## Example:
+  ##   let activeTab = signal(0)
+  ##   dynamic visibleContent:
+  ##     tabs[activeTab.get()].title.get()
+  ##
+  ## A static `computed` declaring `visibleContent` as a dep is a compile
+  ## error under `-d:intonacoStrict` (no baked height); it falls to the
+  ## dynamic floor under the relaxed default. Reads of `visibleContent`
+  ## inside a static body are rejected by the walker (type-quarantine).
+  result = quote do:
+    let `name` = dynamicComputed(proc(): auto = `body`)
