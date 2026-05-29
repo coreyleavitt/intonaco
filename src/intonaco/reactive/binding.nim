@@ -199,6 +199,17 @@ macro noUndeclaredSignals*(body: typed): untyped =
   walk(body)
   result = body
 
+proc containsDepSym*(node: NimNode, depSyms: openArray[NimNode]): bool
+    {.compileTime.} =
+  ## True iff `node` (or any descendant) is identity-equal to one of `depSyms`.
+  if node.kind == nnkSym:
+    for d in depSyms:
+      if node == d: return true
+    return false
+  for c in node:
+    if containsDepSym(c, depSyms): return true
+  false
+
 proc rewriteDepRefs*(node: NimNode, depSyms: openArray[NimNode]): NimNode
     {.compileTime.} =
   ## Rewrite every reference inside `node` that resolves (via identity-equal
@@ -223,8 +234,18 @@ proc rewriteDepRefs*(node: NimNode, depSyms: openArray[NimNode]): NimNode
     return node
   if node.len == 0:
     return node
-  result = newNimNode(node.kind)
-  result.copyLineInfo(node)
+  # Fast path: if no descendant matches a dep sym, return the original
+  # subtree untouched — preserves all semantic metadata for typed nodes
+  # that came via template substitution. Only rebuild when a substitution
+  # is actually needed.
+  var needsRewrite = false
+  for c in node:
+    if containsDepSym(c, depSyms):
+      needsRewrite = true
+      break
+  if not needsRewrite:
+    return node
+  result = node.copyNimNode()
   for c in node:
     result.add rewriteDepRefs(c, depSyms)
 
