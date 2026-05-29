@@ -103,6 +103,21 @@ type
       ## Exported only for `deltafloor.onDelta` to attach a consumer; touched
       ## otherwise solely by `deliver` here. Not a reactive edge itself.
 
+  DynamicCollection*[T] = ref object of ReactiveCollection[T]
+    ## The ◇-modality dual of `CollectionSignal[T]`: a reactive
+    ## collection whose schedule is *not* statically resolvable. Carries
+    ## the dynamic-tier marker through the type system so the C-shape
+    ## walker and the modality-polymorphic `derive`/`keep`/`fold`
+    ## macros can detect it precisely.
+    ##
+    ## Subtyping rationale (M-δ design): unlike `Dynamic[T]` for scalars
+    ## (which deliberately does NOT subtype `Signal[T]`), this type DOES
+    ## subtype `ReactiveCollection[T]`. The scalar walker enforces
+    ## modality at the call site (`.get()`) where subsumption could
+    ## leak; the collection walker enforces it at the dispatch site
+    ## (`derive(deps, ...)` via `getTypeInst`), where precise dispatch
+    ## defeats the subsumption concern. See `docs/rfc-modal-tiers.md`.
+
   CollectionSignal*[T] = ref object of ReactiveCollection[T]
     label*: string
       ## Identifier emitted with `ekCollectionDelta` journal events.
@@ -230,6 +245,17 @@ proc pushDelta*[T](c: ReactiveCollection[T], d: Delta[T]) =
   ## its source, which journals on its own.
   applyDelta(c, d)
   deliver(c, d)
+
+proc newDynamicReactive*[T](initial: seq[T] = @[], height = 0):
+    DynamicCollection[T] =
+  ## Substrate-internal allocator for `DynamicCollection[T]`. Mirrors
+  ## `newReactive` but produces the ◇-modality flavor used by the
+  ## dynamic floor (`mappedDynamic` / `filteredDynamic`) and as the
+  ## seed in M-δ tests. Consumer-facing seed macro is a follow-on
+  ## (M-δ.2): substrate authors who want to expose a runtime-shaped
+  ## collection as dynamic-tier mark it through this allocator.
+  result = DynamicCollection[T](items: initial)
+  Subscribable(result).height = height
 
 proc newReactive*[T](initial: seq[T] = @[], height = 0): ReactiveCollection[T] =
   ## A bare reactive collection seeded with `initial` at the given height — the

@@ -28,10 +28,8 @@ import std/macros
 import ../primitives/subscribable   # Subscribable / trackRead / notify / ReactiveRead
 import ../primitives/scheduler
 import ../primitives/runtime        # createEffect (the internal floor)
-
-type
-  Dynamic*[T] = ref object of Subscribable
-    val: T
+import ../primitives/dynamic        # Dynamic[T] type — moved here for M-δ
+export dynamic                       # consumers see Dynamic[T] via dsl/dynamic
 
 proc get*[T](d: Dynamic[T]): T {.gcsafe, tags: [ReactiveRead].} =
   ## Read the current value, registering a dependency on the current

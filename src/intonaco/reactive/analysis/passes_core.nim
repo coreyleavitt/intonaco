@@ -34,7 +34,15 @@ import ./pass
 import ./diagnostic
 
 const safeAccessors = ["peek"]
-const reactiveTypes = ["Signal", "Dynamic"]
+const reactiveTypes = ["Signal", "Dynamic", "DynamicCollection"]
+  ## Types whose undeclared read inside a static binding body is a
+  ## walker error. `DynamicCollection` added at M-δ for modal symmetry
+  ## with `Dynamic`: a ◇-typed value (collection or scalar) cannot
+  ## appear in a □-typed binding without an explicit modality cast.
+  ## `CollectionSignal` is deliberately excluded — its reads are
+  ## expected to flow through `derive`/`keep`/`fold`/`scan` macros, not
+  ## raw binding bodies, but raw reads aren't rejected today (a
+  ## separate gap not in M-δ scope).
 
 proc forbidsReactive(callee: NimNode): bool {.compileTime.} =
   if callee.kind != nnkSym: return false

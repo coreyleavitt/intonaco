@@ -24,6 +24,7 @@ import ./scheduler
 import ./scope
 import ./collection
 import ./signal
+import ./dynamic
 import ./convergence
 
 proc onDelta*[T](c: ReactiveCollection[T], handler: DeltaHandler[T]) =
@@ -74,15 +75,12 @@ proc mapDelta[T, U](d: Delta[T], f: proc(x: T): U {.closure.}): Delta[U] =
     # recompute, so there's no inverse-mapping path to get subtly wrong.
     raise newException(Defect, "mapDelta: dkRollback is handled by recompute, not mapped")
 
-proc mapped*[T, U](c: ReactiveCollection[T], f: proc(x: T): U {.closure.},
-                   fixedHeight = -1): ReactiveCollection[U] =
-  ## The runtime floor under the `derive` macro — value-constructed. A mapped
-  ## view of `c`: `value === c.map(f)`, maintained incrementally (each source
-  ## delta becomes a mapped delta applied to the view and forwarded to the
-  ## view's own consumers). `fixedHeight >= 0` bakes the scheduling height.
-  ## Accepts ANY `ReactiveCollection` source, so `derive` composes.
-  let h = if fixedHeight >= 0: fixedHeight else: Subscribable(c).height + 1
-  let d = newReactive[U](c.get().map(f), height = h)
+template mappedWiring[T, U](c: ReactiveCollection[T],
+                            f: proc(x: T): U {.closure.},
+                            d: ReactiveCollection[U]) =
+  ## Shared delta-wiring for `mapped` (□) and `mappedDynamic` (◇). Both
+  ## flavors observe `c`'s deltas the same way; only the output type
+  ## and height-composition differ.
   c.onDelta proc(delta: Delta[T]) =
     if delta.kind == dkRollback:
       # A structural revert: recompute the view from the (already rolled-back)
@@ -92,56 +90,74 @@ proc mapped*[T, U](c: ReactiveCollection[T], f: proc(x: T): U {.closure.},
       pushDelta(d, Delta[U](kind: dkReplace, replaceVal: c.get().map(f)))
     else:
       pushDelta(d, mapDelta(delta, f))   # mapped delta: apply + emit to d's consumers
+
+proc mapped*[T, U](c: ReactiveCollection[T], f: proc(x: T): U {.closure.},
+                   fixedHeight = -1): ReactiveCollection[U] =
+  ## The static (□-modality) floor under the `derive` macro. `value ===
+  ## c.map(f)`, maintained incrementally. `fixedHeight >= 0` bakes the
+  ## scheduling height (set by the macro from compile-time height
+  ## composition).
+  let h = if fixedHeight >= 0: fixedHeight else: Subscribable(c).height + 1
+  let d = newReactive[U](c.get().map(f), height = h)
+  mappedWiring(c, f, d)
   d
 
-proc filtered*[T](c: ReactiveCollection[T], p: proc(x: T): bool {.closure.},
-                  fixedHeight = -1): ReactiveCollection[T] =
-  ## The runtime floor under the `filter` macro. A filtered view of `c`:
-  ## `value === c.filter(p)`, maintained incrementally. `filter` is linear
-  ## (selection distributes over disjoint union), but the POSITIONAL model needs
-  ## a source→view index translation: `kept[i]` mirrors `p(source[i])`, and a
-  ## source index maps to a view index by `rank` (kept elements strictly before
-  ## it). `p` must be pure (enforced by the macro) — a signal-dependent predicate
-  ## is bilinear, out of scope.
+proc mappedDynamic*[T, U](c: ReactiveCollection[T],
+                          f: proc(x: T): U {.closure.}):
+    DynamicCollection[U] =
+  ## The dynamic (◇-modality) floor under the `derive` macro: same delta
+  ## semantics as `mapped`, but the output carries `DynamicCollection`
+  ## modality and uses runtime-height composition only. Used when the
+  ## source is itself a `DynamicCollection` — the macro dispatches.
+  let d = newDynamicReactive[U](c.get().map(f),
+                                height = Subscribable(c).height + 1)
+  mappedWiring(c, f, ReactiveCollection[U](d))
+  d
+
+proc filteredInitial[T](c: ReactiveCollection[T],
+                        p: proc(x: T): bool {.closure.}):
+                       tuple[initial: seq[T], kept: seq[bool]] =
   let src = c.get()
-  var kept = newSeq[bool](src.len)
-  var initial: seq[T]
+  result.kept = newSeq[bool](src.len)
   for i in 0 ..< src.len:
-    kept[i] = p(src[i])
-    if kept[i]: initial.add src[i]
-  let h = if fixedHeight >= 0: fixedHeight else: Subscribable(c).height + 1
-  let d = newReactive[T](initial, height = h)
-  # rank(i) = number of kept elements strictly before source index i. O(i) here;
-  # an order-statistic / Fenwick structure makes it O(log n) without changing the
-  # rule (a localized optimization for large collections).
+    result.kept[i] = p(src[i])
+    if result.kept[i]: result.initial.add src[i]
+
+proc filteredWiring[T](c: ReactiveCollection[T],
+                       p: proc(x: T): bool {.closure.},
+                       d: ReactiveCollection[T],
+                       kept: ref seq[bool]) =
+  ## Shared delta-wiring for `filtered` (□) and `filteredDynamic` (◇).
+  ## `kept` is the source→view kept-mask, held through a `ref` so the
+  ## delta-handler closure can mutate it across invocations.
   proc rank(i: int): int =
     for j in 0 ..< i:
-      if kept[j]: inc result
+      if kept[][j]: inc result
   proc recompute() =
     let s = c.get()
-    kept = newSeq[bool](s.len)
+    kept[] = newSeq[bool](s.len)
     var fv: seq[T]
     for i in 0 ..< s.len:
-      kept[i] = p(s[i])
-      if kept[i]: fv.add s[i]
+      kept[][i] = p(s[i])
+      if kept[][i]: fv.add s[i]
     pushDelta(d, Delta[T](kind: dkReplace, replaceVal: fv))
   c.onDelta proc(delta: Delta[T]) =
     case delta.kind
     of dkInsert:
       let r = rank(delta.insertIdx)
       let k = p(delta.insertVal)
-      kept.insert(k, delta.insertIdx)
+      kept[].insert(k, delta.insertIdx)
       if k: pushDelta(d, Delta[T](kind: dkInsert, insertIdx: r, insertVal: delta.insertVal))
     of dkRemove:
       let r = rank(delta.removeIdx)
-      let was = kept[delta.removeIdx]
-      kept.delete(delta.removeIdx)
+      let was = kept[][delta.removeIdx]
+      kept[].delete(delta.removeIdx)
       if was: pushDelta(d, Delta[T](kind: dkRemove, removeIdx: r))
     of dkUpdate:
       let r = rank(delta.updateIdx)
-      let oldK = kept[delta.updateIdx]
+      let oldK = kept[][delta.updateIdx]
       let newK = p(delta.updateVal)
-      kept[delta.updateIdx] = newK
+      kept[][delta.updateIdx] = newK
       if oldK and newK:
         pushDelta(d, Delta[T](kind: dkUpdate, updateIdx: r, updateVal: delta.updateVal))
       elif oldK and not newK:
@@ -150,16 +166,37 @@ proc filtered*[T](c: ReactiveCollection[T], p: proc(x: T): bool {.closure.},
         pushDelta(d, Delta[T](kind: dkInsert, insertIdx: r, insertVal: delta.updateVal))
       # else: stays filtered out — no view delta
     of dkClear:
-      kept.setLen(0)
+      kept[].setLen(0)
       pushDelta(d, Delta[T](kind: dkClear))
     of dkReplace:
-      kept = newSeq[bool](delta.replaceVal.len)
+      kept[] = newSeq[bool](delta.replaceVal.len)
       var fv: seq[T]
       for i in 0 ..< delta.replaceVal.len:
-        kept[i] = p(delta.replaceVal[i])
-        if kept[i]: fv.add delta.replaceVal[i]
+        kept[][i] = p(delta.replaceVal[i])
+        if kept[][i]: fv.add delta.replaceVal[i]
       pushDelta(d, Delta[T](kind: dkReplace, replaceVal: fv))
     of dkRollback: recompute()   # recompute from the reverted source (the oracle)
+
+proc filtered*[T](c: ReactiveCollection[T], p: proc(x: T): bool {.closure.},
+                  fixedHeight = -1): ReactiveCollection[T] =
+  ## The static (□-modality) floor under the `keep` macro. `value ===
+  ## c.filter(p)`, maintained incrementally via a kept-mask + rank.
+  let (initial, kept) = filteredInitial(c, p)
+  let keptRef = new(seq[bool]); keptRef[] = kept
+  let h = if fixedHeight >= 0: fixedHeight else: Subscribable(c).height + 1
+  let d = newReactive[T](initial, height = h)
+  filteredWiring(c, p, d, keptRef)
+  d
+
+proc filteredDynamic*[T](c: ReactiveCollection[T],
+                         p: proc(x: T): bool {.closure.}):
+    DynamicCollection[T] =
+  ## The dynamic (◇-modality) floor under the `keep` macro. Same
+  ## incremental semantics as `filtered`, modality-typed output.
+  let (initial, kept) = filteredInitial(c, p)
+  let keptRef = new(seq[bool]); keptRef[] = kept
+  let d = newDynamicReactive[T](initial, height = Subscribable(c).height + 1)
+  filteredWiring(c, p, ReactiveCollection[T](d), keptRef)
   d
 
 proc folded*[T, M: CommutativeGroup](c: ReactiveCollection[T],
@@ -212,6 +249,56 @@ proc folded*[T, M: CommutativeGroup](c: ReactiveCollection[T],
         acc = merge(acc, m)
     outSig.set(acc)
   outSig
+
+proc foldedDynamic*[T, M: CommutativeGroup](c: ReactiveCollection[T],
+    f: proc(x: T): M {.closure.}): Dynamic[M] =
+  ## The dynamic (◇-modality) floor under the `fold` macro: same
+  ## incremental commutative-group aggregation as `folded`, but the
+  ## output is a `Dynamic[M]` carrying the ◇-modality through the type
+  ## system. Height is runtime-composed (no fixedHeight knob — dynamic
+  ## inputs don't carry a baked height for the macro to thread through).
+  mixin merge, unit, invert
+  var contributions: seq[M]
+  var acc = unit(M)
+  for x in c.get():
+    let m = f(x)
+    contributions.add m
+    acc = merge(acc, m)
+  let outDyn = newDynamic(acc)
+  Subscribable(outDyn).height = Subscribable(c).height + 1
+  c.onDelta proc(delta: Delta[T]) =
+    case delta.kind
+    of dkInsert:
+      let m = f(delta.insertVal)
+      contributions.insert(m, delta.insertIdx)
+      acc = merge(acc, m)
+    of dkRemove:
+      acc = merge(acc, invert(contributions[delta.removeIdx]))
+      contributions.delete(delta.removeIdx)
+    of dkUpdate:
+      let m = f(delta.updateVal)
+      acc = merge(merge(acc, invert(contributions[delta.updateIdx])), m)
+      contributions[delta.updateIdx] = m
+    of dkClear:
+      contributions.setLen(0)
+      acc = unit(M)
+    of dkReplace:
+      contributions.setLen(0)
+      acc = unit(M)
+      for x in delta.replaceVal:
+        let m = f(x)
+        contributions.add m
+        acc = merge(acc, m)
+    of dkRollback:
+      contributions.setLen(0)
+      acc = unit(M)
+      for x in c.get():
+        let m = f(x)
+        contributions.add m
+        acc = merge(acc, m)
+    outDyn.val = acc
+    notify(Subscribable(outDyn))
+  outDyn
 
 # --- Delta-stream fold floor (under scan) ---------------------------------
 

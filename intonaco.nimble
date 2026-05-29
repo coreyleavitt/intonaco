@@ -29,6 +29,7 @@ task test, "run intonaco's standalone tests":
     "tests/test_deferred.nim",
     "tests/test_deferred_cancellation.nim",
     "tests/test_mountwhen.nim",
+    "tests/test_collection_modality.nim",
     "tests/test_aggregators.nim",
     "tests/test_walker_passes.nim",
     "tests/test_kit.nim",
@@ -59,6 +60,10 @@ task strictcheck, "compile-probe the -d:intonacoStrict guarantees":
   for p in ["tests/test_binding_strict_fail.nim"]:
     exec "if nim check " & opts & p &
       "; then echo 'EXPECTED STRICT ERROR: " & p & "'; exit 1; else exit 0; fi"
+  # MUST be a hard error under any mode (M-δ modal quarantine):
+  for p in ["tests/test_modal_quarantine_fail.nim"]:
+    exec "if nim check --hints:off --warnings:off --path:src " & p &
+      "; then echo 'EXPECTED WALKER ERROR: " & p & "'; exit 1; else exit 0; fi"
   # MUST compile under strict (all sources baked via signals:):
   for p in ["tests/test_binding_strict_ok.nim"]:
     exec "nim check " & opts & p

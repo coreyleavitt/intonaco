@@ -25,6 +25,13 @@ import ../primitives/height
 import ../analysis/pass            # runAnalysis
 import ../analysis/passes_core     # registers the three core walker passes
 
+proc isDynamicCollectionType(ty: NimNode): bool {.compileTime.} =
+  ## True iff `ty` is `DynamicCollection[_]` (the ◇-modality collection).
+  ## The modality check the M-δ macros dispatch on — distinct from
+  ## CollectionSignal (□-modality source) and from a baked-height
+  ## derived view.
+  ty.kind == nnkBracketExpr and ty.len >= 1 and ty[0].repr == "DynamicCollection"
+
 proc sourceHeight(coll: NimNode): int {.compileTime.} =
   ## The compile-time height of a `derive` source. A `CollectionSignal[_]` is
   ## ALWAYS a source (a derived view is a plain `ReactiveCollection` carrying a
@@ -62,21 +69,61 @@ proc transformBinding(name, coll, fn, floor: NimNode, op: string): NimNode
   nnkLetSection.newTree(nnkIdentDefs.newTree(
     withHeight(name, h), newEmptyNode(), ctor))
 
+proc transformBindingDynamic(name, coll, fn, floorDynamic: NimNode): NimNode
+    {.compileTime.} =
+  ## Dynamic-modality (◇) emission. Same walker check as the static
+  ## variant (the function must be linear), but the source carries no
+  ## baked height — emission is `floorDynamic(coll, fn)` with runtime
+  ## height composition, and the result's type carries the ◇-modality
+  ## through the binding (no `{.height.}` pragma on `name`).
+  let body = fnBody(fn)
+  discard getAst(runAnalysis(body, []))
+  let ctor = newCall(floorDynamic, coll, fn)
+  nnkLetSection.newTree(nnkIdentDefs.newTree(name, newEmptyNode(), ctor))
+
 macro derive*(name: untyped, coll: typed, f: typed): untyped =
-  ## A compile-time-scheduled mapped view of a collection — the blessed `map`
-  ## (the floor is `mapped`). `f` must be pure (linear `map`); the height is
-  ## resolved + baked so downstream transforms compose.
-  transformBinding(name, coll, f, bindSym"mapped", "derive")
+  ## A reactive mapped view of a collection — the blessed `map`. Modality-
+  ## polymorphic: dispatches on the input's static type.
+  ##
+  ## * Static input (`CollectionSignal[T]` or a baked-height derived
+  ##   view): emits `mapped` with a compile-time-composed `fixedHeight`,
+  ##   bakes `{.height.}` on `name`, returns `ReactiveCollection[U]`.
+  ## * Dynamic input (`DynamicCollection[T]`): emits `mappedDynamic`,
+  ##   no height bake, returns `DynamicCollection[U]`. The ◇-modality
+  ##   propagates so chained `derive`/`keep` over the result stay
+  ##   dynamic.
+  ##
+  ## `f` must be pure (linear `map`) in both modes — the walker
+  ## rejects reactive reads inside the function body regardless of
+  ## modality.
+  if isDynamicCollectionType(coll.getTypeInst):
+    transformBindingDynamic(name, coll, f, bindSym"mappedDynamic")
+  else:
+    transformBinding(name, coll, f, bindSym"mapped", "derive")
 
 macro keep*(name: untyped, coll: typed, p: typed): untyped =
-  ## A compile-time-scheduled filtered view — keeps the elements satisfying `p`
-  ## (the floor is `filtered`). Named `keep` rather than `filter` because
-  ## `std/sequtils` exports `filter`, and the new-binding name in `keep e, c, p`
-  ## would collide during overload resolution. `p` must be pure (linear).
-  transformBinding(name, coll, p, bindSym"filtered", "keep")
+  ## A reactive filtered view — keeps elements satisfying `p`. Modality-
+  ## polymorphic (M-δ): dispatches on input type, mirroring `derive`.
+  ## Named `keep` rather than `filter` because `std/sequtils` exports
+  ## `filter`, and the new-binding name in `keep e, c, p` would collide
+  ## during overload resolution. `p` must be pure (linear) in both modes.
+  if isDynamicCollectionType(coll.getTypeInst):
+    transformBindingDynamic(name, coll, p, bindSym"filteredDynamic")
+  else:
+    transformBinding(name, coll, p, bindSym"filtered", "keep")
 
 macro fold*(name: untyped, coll: typed, f: typed): untyped =
-  ## A compile-time-scheduled incremental aggregate (collection→scalar) over a
-  ## commutative group — the floor is `folded`. `acc = ⊕ f(x)`, maintained O(1)
-  ## per delta via the group inverse. `f` must be pure (linear).
-  transformBinding(name, coll, f, bindSym"folded", "fold")
+  ## An incremental commutative-group aggregate (collection→scalar).
+  ## Modality-polymorphic:
+  ##
+  ## * Static input: emits `folded`, output `Signal[M]` with baked height.
+  ## * Dynamic input: emits `foldedDynamic`, output `Dynamic[M]` — the
+  ##   ◇-modality of the scalar tier. The modality propagates so
+  ##   downstream static `computed`/`effect` over the result is
+  ##   walker-rejected (type-quarantine via `Dynamic[_]`).
+  ##
+  ## `f` must be pure (linear) in both modes.
+  if isDynamicCollectionType(coll.getTypeInst):
+    transformBindingDynamic(name, coll, f, bindSym"foldedDynamic")
+  else:
+    transformBinding(name, coll, f, bindSym"folded", "fold")
