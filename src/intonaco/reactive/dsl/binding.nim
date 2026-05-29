@@ -39,120 +39,33 @@ import ../primitives/signal
 import ../primitives/subscribable
 import ../primitives/height
 import ../primitives/computation
-import ../analysis/pass
-import ../analysis/passes_core   # registers the three core walker passes
-import ../analysis/ast
+import ./kit                         # the substrate-template authoring kit
 
 export signal      # `Signal[T]`, `signal(...)`, `signals:`, `peek` — the
                    # user-facing static-tier surface composes on top of these
 export height      # `heightOf` / `composeHeight` / `withHeight` — needed by
                    # the macros' generated code AND by `bakedHeight`'s callers
 
-# --- The macros (sugar over the primitives + walker + height bake) ----------
+# --- The macros (built on the kit's orchestrator) ---------------------------
 
 macro computedInner(name: untyped, deps: typed, body: untyped,
                     origDeps: untyped): untyped =
-  ## Inner typed-arg macro for `computed`. `deps` arrives as a typed bracket
-  ## of `Subscribable(<sym>)` calls (homogenized by the outer wrapper); we
-  ## unwrap each to the original sym for `heightOf`, compose at compile time,
-  ## bake the result onto `name`.
-  var depSyms: seq[NimNode]
-  var shadows = newStmtList()
-  for d in deps:
-    var sym = d
-    if sym.kind in {nnkCall, nnkHiddenCallConv, nnkHiddenStdConv, nnkConv} and
-       sym.len >= 2:
-      sym = sym[^1]
-    sym = depSymUnwrap(sym)
-    depSyms.add sym
-    let lhs = newIdentNode(if sym.kind == nnkSym: sym.strVal else: $sym)
-    shadows.add quote do:
-      let `lhs` = `sym`.peek()
-  # Rewrite dep-sym references in the body to fresh idents — required for
-  # bodies arriving via template substitution (the template parameter sym
-  # ends up in the body AST and the ident-shadow doesn't shadow already-
-  # typed syms). See `rewriteDepRefs` for the rationale.
-  let bodyRewritten = rewriteDepRefs(body, depSyms)
-  # Wrap ONLY the user's body in `noUndeclaredSignals` — not the shadows
-  # (their `let x = x.peek()` legitimately reads the outer Signal once).
-  let bodyChecked = quote do:
-    runAnalysis(`bodyRewritten`, `deps`)
-  var bodyOut = newStmtList()
-  for s in shadows: bodyOut.add s
-  bodyOut.add bodyChecked
-  let staticH = composeHeight(depSyms)
-  if staticH.isSome:
-    let h = staticH.get
-    let hLit = newLit(h)
-    let ctor = quote do:
-      computedC(`deps`, proc(): auto = `bodyOut`, fixedHeight = `hLit`)
-    result = nnkLetSection.newTree(
-      nnkIdentDefs.newTree(withHeight(name, h), newEmptyNode(), ctor))
-  else:
-    if defined(intonacoStrict):
-      error("computed: at least one dep has no resolvable compile-time " &
-            "height — declare the source via `signals:` or wrap the read " &
-            "in `dynamic:`", origDeps)
-    result = quote do:
-      let `name` = computedC(`deps`, proc(): auto = `bodyOut`)
+  compileBindingInner(name, deps, body, origDeps,
+                      bindSym"computedC", ekComputedShape, "computed")
 
 macro computed*(name: untyped, deps: untyped, body: untyped): untyped =
   ## `computed name, [d1, d2, ...]: body`. Two-macro pattern: outer untyped
-  ## wraps each dep with `Subscribable(...)` (homogenizes the array so Nim's
-  ## type-unification doesn't reject mixed `Signal[T]` element types), inner
-  ## typed (`computedInner`) resolves heights at compile time and bakes the
-  ## resulting `{.height.}` pragma onto `name`.
-  expectKind(deps, nnkBracket)
-  var wrapped = nnkBracket.newTree()
-  for d in deps:
-    wrapped.add quote do: Subscribable(`d`)
-  result = quote do:
-    computedInner(`name`, `wrapped`, `body`, `deps`)
+  ## wraps each dep with `Subscribable(...)`; inner typed resolves heights at
+  ## compile time + bakes `{.height.}` onto `name`.
+  wrapDepsForInner(bindSym"computedInner", name, deps, body)
 
 macro effectInner(deps: typed, body: untyped, origDeps: untyped): untyped =
-  ## Inner typed-arg macro for `effect`. Same shape as `computedInner`, no
-  ## output binding.
-  var depSyms: seq[NimNode]
-  var shadows = newStmtList()
-  for d in deps:
-    var sym = d
-    if sym.kind in {nnkCall, nnkHiddenCallConv, nnkHiddenStdConv, nnkConv} and
-       sym.len >= 2:
-      sym = sym[^1]
-    sym = depSymUnwrap(sym)
-    depSyms.add sym
-    let lhs = newIdentNode(if sym.kind == nnkSym: sym.strVal else: $sym)
-    shadows.add quote do:
-      let `lhs` = `sym`.peek()
-  # See `rewriteDepRefs` rationale in computedInner.
-  let bodyRewritten = rewriteDepRefs(body, depSyms)
-  let bodyChecked = quote do:
-    runAnalysis(`bodyRewritten`, `deps`)
-  var bodyOut = newStmtList()
-  for s in shadows: bodyOut.add s
-  bodyOut.add bodyChecked
-  let staticH = composeHeight(depSyms)
-  if staticH.isSome:
-    let hLit = newLit(staticH.get)
-    result = quote do:
-      effectC(`deps`, proc() = `bodyOut`, fixedHeight = `hLit`)
-  else:
-    if defined(intonacoStrict):
-      error("effect: at least one dep has no resolvable compile-time " &
-            "height — declare the source via `signals:` or wrap the read " &
-            "in `dynamic:`", origDeps)
-    result = quote do:
-      effectC(`deps`, proc() = `bodyOut`)
+  compileBindingInner(newEmptyNode(), deps, body, origDeps,
+                      bindSym"effectC", ekEffectShape, "effect")
 
 macro effect*(deps: untyped, body: untyped): untyped =
-  ## `effect [d1, d2, ...]: body` — same shape as `computed`, side-effect
-  ## only (no output binding).
-  expectKind(deps, nnkBracket)
-  var wrapped = nnkBracket.newTree()
-  for d in deps:
-    wrapped.add quote do: Subscribable(`d`)
-  result = quote do:
-    effectInner(`wrapped`, `body`, `deps`)
+  ## `effect [d1, d2, ...]: body` — same shape as `computed`, side-effect only.
+  wrapDepsForInnerNoName(bindSym"effectInner", deps, body)
 
 # --- Introspection helper ---------------------------------------------------
 

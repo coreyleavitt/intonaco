@@ -36,3 +36,8 @@ import ./reactive/analysis/passes_core
 import ./reactive/analysis/ast
 import ./reactive/analysis/diagnostic
 export pass, passes_core, ast, diagnostic
+
+# Substrate-template authoring kit — for sinopia / future research-direction
+# modules building new substrate templates.
+import ./reactive/dsl/kit
+export kit

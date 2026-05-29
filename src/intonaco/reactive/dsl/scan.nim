@@ -31,32 +31,21 @@ import ../primitives/height
 import ../primitives/subscribable # `Subscribable` — bindSym'd into the homogenization wrapping
 import ../analysis/pass            # runAnalysis
 import ../analysis/passes_core     # registers the three core walker passes
-
-proc unwrapConv(n: NimNode): NimNode {.compileTime.} =
-  ## Walk through implicit-conversion wrappers down to the sym.
-  result = n
-  while result.kind in {nnkHiddenCallConv, nnkHiddenStdConv, nnkConv} and
-        result.len >= 2:
-    result = result[1]
+import ./kit                       # extractDepSyms — the kit's dep-extraction helper
 
 macro scanInner(name: untyped, coll: typed, deps: typed,
                 initial: typed, step: typed,
                 origDeps: untyped): untyped =
-  ## Inner typed-arg macro. `deps` arrives as a typed bracket of
-  ## `Subscribable(<sym>)` calls; we extract syms for heightOf, compose the
-  ## scan's height, and emit the `foldDeltas` call with `fixedHeight` baked.
-  ## The shadow `let`s on the step body were prepended by the outer macro.
+  ## Inner typed-arg macro. Uses the kit's `extractDepSyms` for dep extraction;
+  ## scan's height policy (1 + max(coll.height, max(deps.height))) is
+  ## specialized so the kit's high-level orchestrator doesn't apply, but the
+  ## helper is shared.
   let ch = heightOf(coll)
   if ch.isNone:
     error("scan: `" & coll.repr & "` has no compile-time height — declare " &
           "the collection via `collections:`", coll)
   var h = ch.get + 1
-  for d in deps:
-    var sym = d
-    if sym.kind in {nnkCall, nnkHiddenCallConv, nnkHiddenStdConv, nnkConv} and
-       sym.len >= 2:
-      sym = sym[^1]
-    sym = unwrapConv(sym)
+  for sym in extractDepSyms(deps):
     let dh = heightOf(sym)
     if dh.isNone:
       error("scan: dep `" & sym.repr & "` has no compile-time height — " &
