@@ -11,8 +11,8 @@
 ## meant to handle. If they're all correct + exactly-once, cut that section.
 
 import std/unittest
-import intonaco/reactive/signal
-import intonaco/reactive/runtime
+import intonaco/reactive/primitives/signal
+import intonaco/reactive/primitives/runtime
 
 suite "effect-feedback under the uniform worklist":
 

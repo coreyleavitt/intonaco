@@ -9,8 +9,8 @@
 
 import std/unittest
 import chronos
-import intonaco/reactive/scope
-import intonaco/reactive/signal
+import intonaco/reactive/primitives/scope
+import intonaco/reactive/primitives/signal
 import intonaco/task/core
 import intonaco/task/mount
 

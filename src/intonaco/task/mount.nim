@@ -25,10 +25,10 @@
 ## itself rides on the existing `effect [boolSig]: ...` macro from `binding`.
 
 import chronos/contextvars
-import intonaco/reactive/signal
-import intonaco/reactive/scope
-import intonaco/reactive/binding       # effect macro
-import intonaco/reactive/subscribable  # runAfterPropagation — the decide/act seam
+import intonaco/reactive/primitives/signal
+import intonaco/reactive/primitives/scope
+import intonaco/reactive/dsl/binding       # effect macro
+import intonaco/reactive/primitives/subscribable  # runAfterPropagation — the decide/act seam
 import ./core
 
 template mountWhen*(boolSig: Signal[bool], body: untyped): untyped =

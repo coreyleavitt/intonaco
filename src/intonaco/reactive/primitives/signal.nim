@@ -33,6 +33,11 @@ type
     val: T
     label*: string
 
+converter toSubscribable*[T](s: Signal[T]): Subscribable = s.Subscribable
+  ## Lets a `[count, doubled]` bracket of `Signal[T]` elements be passed
+  ## where `openArray[Subscribable]` is expected. Lives alongside the
+  ## `Signal[T]` type since the converter is structurally tied to it.
+
 # The `ReactiveRead` / `ReactiveWrite` `tags` effects live in `subscribable`
 # (they describe reactive-state access generally, not signals specifically);
 # `get` / `setRaw` below declare them.
@@ -44,7 +49,7 @@ proc signal*[T](initial: T, label = ""): Signal[T] =
   ## used by the journal for `ekSignalWrite` events — unlabeled
   ## signals are excluded from state-restoration projection.
   ##
-  ## If `pendingRestoration` (see `intonaco/reactive/restoration`)
+  ## If `pendingRestoration` (see `intonaco/reactive/primitives/restoration`)
   ## contains `label`, the journal-staged value replaces `initial`
   ## (read-and-remove). Empty labels and labels not in the staging
   ## table short-circuit at one table lookup — non-restoration

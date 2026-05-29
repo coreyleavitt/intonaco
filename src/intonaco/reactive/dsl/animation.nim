@@ -23,8 +23,8 @@
 
 import std/math
 import chronos
-import ./signal
-import ./scope
+import ../primitives/signal
+import ../primitives/scope
 
 type
   Easing* = enum

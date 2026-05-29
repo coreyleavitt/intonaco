@@ -9,9 +9,9 @@
 ## `if dep:` inside a template wrapper sees the outer Signal[T], not the bool.
 
 import std/unittest
-import intonaco/reactive/scope
-import intonaco/reactive/signal
-import intonaco/reactive/binding
+import intonaco/reactive/primitives/scope
+import intonaco/reactive/primitives/signal
+import intonaco/reactive/dsl/binding
 
 template observeBoolViaTemplate*(boolSig: Signal[bool],
                                   recorder: var seq[bool]): untyped =

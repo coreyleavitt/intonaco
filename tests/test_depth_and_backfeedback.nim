@@ -7,8 +7,8 @@
 ## must handle correctly.
 
 import std/unittest
-import intonaco/reactive/signal
-import intonaco/reactive/runtime
+import intonaco/reactive/primitives/signal
+import intonaco/reactive/primitives/runtime
 
 suite "backward feedback under the uniform worklist":
 

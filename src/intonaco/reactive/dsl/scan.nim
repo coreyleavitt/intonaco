@@ -26,10 +26,10 @@
 {.experimental: "callOperator".}
 
 import std/[macros, options]
-import ./deltafloor   # deltas / foldDeltas — named by bindSym
-import ./height
-import ./subscribable # `Subscribable` — bindSym'd into the homogenization wrapping
-import ./binding      # noUndeclaredSignals
+import ../primitives/deltafloor   # deltas / foldDeltas — named by bindSym
+import ../primitives/height
+import ../primitives/subscribable # `Subscribable` — bindSym'd into the homogenization wrapping
+import ../analysis/walker      # noUndeclaredSignals
 
 proc unwrapConv(n: NimNode): NimNode {.compileTime.} =
   ## Walk through implicit-conversion wrappers down to the sym.

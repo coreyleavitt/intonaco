@@ -5,9 +5,9 @@
 {.experimental: "callOperator".}
 
 import std/unittest
-import intonaco/reactive/subscribable   # for `Subscribable(x).height` runtime-field tests
-import intonaco/reactive/dynamic        # for the cross-tier wall test
-import intonaco/reactive/binding
+import intonaco/reactive/primitives/subscribable   # for `Subscribable(x).height` runtime-field tests
+import intonaco/reactive/dsl/dynamic        # for the cross-tier wall test
+import intonaco/reactive/dsl/binding
 
 # ---- The four core behaviors, in the SUGARED form -----------------------
 

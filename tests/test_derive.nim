@@ -7,14 +7,14 @@
 ## proven equivalent to the wholesale map.
 
 import std/[unittest, sequtils, macros, options]
-import intonaco/reactive/collection
-import intonaco/reactive/deltafloor    # onDelta + the value-constructed floor procs
-import intonaco/reactive/signal
-import intonaco/reactive/runtime       # createEffect (the floor — tests use it directly)
-import intonaco/reactive/speculative
-import intonaco/reactive/height
-import intonaco/reactive/binding       # `computed` / `effect` / `signals:`
-import intonaco/reactive/derive
+import intonaco/reactive/primitives/collection
+import intonaco/reactive/primitives/deltafloor    # onDelta + the value-constructed floor procs
+import intonaco/reactive/primitives/signal
+import intonaco/reactive/primitives/runtime       # createEffect (the floor — tests use it directly)
+import intonaco/reactive/primitives/speculative
+import intonaco/reactive/primitives/height
+import intonaco/reactive/dsl/binding       # `computed` / `effect` / `signals:`
+import intonaco/reactive/dsl/derive
 
 macro heightLit(sym: typed): int =
   let r = heightOf(sym)

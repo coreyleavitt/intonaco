@@ -20,9 +20,9 @@
 {.experimental: "callOperator".}
 
 import std/[macros, options]
-import ./deltafloor   # mapped / filtered / folded — named by bindSym
-import ./height
-import ./binding      # noUndeclaredSignals (the walker)
+import ../primitives/deltafloor   # mapped / filtered / folded — named by bindSym
+import ../primitives/height
+import ../analysis/walker      # noUndeclaredSignals (the walker)
 
 proc sourceHeight(coll: NimNode): int {.compileTime.} =
   ## The compile-time height of a `derive` source. A `CollectionSignal[_]` is

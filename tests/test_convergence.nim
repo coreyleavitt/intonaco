@@ -2,7 +2,7 @@
 ## merging of concurrent writes, classified by the value type's merge algebra.
 
 import std/[unittest, sets, sugar]
-import intonaco/reactive/convergence
+import intonaco/reactive/primitives/convergence
 
 # A counter: a CommutativeMonoid (assoc+comm, identity 0) — NOT idempotent.
 proc merge(a, b: int): int = a + b

@@ -3,7 +3,7 @@
 
 {.experimental: "callOperator".}
 
-import intonaco/reactive/binding
+import intonaco/reactive/dsl/binding
 
 signals:
   count = 0

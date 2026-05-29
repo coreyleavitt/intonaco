@@ -7,7 +7,7 @@
 
 import chronos
 import chronos/contextvars
-import intonaco/reactive/scope
+import intonaco/reactive/primitives/scope
 
 type
   Mount* = ref object

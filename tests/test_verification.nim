@@ -1,7 +1,7 @@
 ## TDD: the shared diagnostic contract (intonaco#55).
 
 import std/[unittest, options, strutils, sequtils]
-import intonaco/verification
+import intonaco/reactive/analysis/diagnostic
 
 proc diag(rule: GlossaryTerm, subject = "", symptom = "", fix = "",
           sev = sevError, id = 0, breaks: seq[string] = @[]): Diagnostic =

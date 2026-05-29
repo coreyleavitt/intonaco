@@ -25,8 +25,8 @@
 {.experimental: "callOperator".}
 
 import std/macros
-import ./subscribable   # Subscribable / trackRead / notify / ReactiveRead
-import ./runtime        # createEffect (the internal floor)
+import ../primitives/subscribable   # Subscribable / trackRead / notify / ReactiveRead
+import ../primitives/runtime        # createEffect (the internal floor)
 
 type
   Dynamic*[T] = ref object of Subscribable

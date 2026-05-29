@@ -15,7 +15,7 @@
 ## here — reach for the `derive`/`keep`/`fold`/`scan` macros instead. It is
 ## `*`-exported only so those macros' `bindSym` and deliberate consumers (e.g.
 ## fresco's `bindCollection`, whose windowed view is legitimately dynamic) can
-## name it; the explicit `import intonaco/reactive/deltafloor` is the greppable
+## name it; the explicit `import intonaco/reactive/primitives/deltafloor` is the greppable
 ## "I'm bypassing the classifier" act, mirroring `reactive/runtime` for signals.
 
 import std/sequtils

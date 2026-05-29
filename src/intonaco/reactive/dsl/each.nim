@@ -19,10 +19,10 @@
 ## `dynamic`) attach to the current scope; the scope's disposal on remove
 ## tears them all down.
 
-import ./subscribable
-import ./scope
-import ./collection
-import ./deltafloor
+import ../primitives/subscribable
+import ../primitives/scope
+import ../primitives/collection
+import ../primitives/deltafloor
 
 proc eachItem*[T](src: CollectionSignal[T],
                   body: proc(item: T) {.closure.}) =

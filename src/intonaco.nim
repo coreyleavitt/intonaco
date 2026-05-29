@@ -10,18 +10,18 @@
 ##   - sinopia  — planned trace frontend (will depend on intonaco)
 ##
 ## Key entry points (C-shape substrate):
-##   - intonaco/reactive/binding      — `computed name, [deps]: body` /
+##   - intonaco/reactive/dsl/binding      — `computed name, [deps]: body` /
 ##                                      `effect [deps]: body` macros + walker
-##   - intonaco/reactive/dynamic      — `Dynamic[T]` + `dynamic name: body` macro
-##   - intonaco/reactive/each         — `eachItem` over `CollectionSignal`
-##   - intonaco/reactive/signal       — `Signal[T]` + `signals:` macro
-##   - intonaco/reactive/collection   — `CollectionSignal[T]`
-##   - intonaco/reactive/derive       — `derive` / `keep` / `fold` (collection algebra)
-##   - intonaco/reactive/scan         — `scan` (collection delta fold)
-##   - intonaco/reactive/scope        — `newScope` / `withScope` / `dispose`
-##   - intonaco/reactive/speculative  — `speculative:` blocks
-##   - intonaco/reactive/animation    — tween / spring / frame clock
-##   - intonaco/reactive/context      — `provide T: v` / `use T`
+##   - intonaco/reactive/dsl/dynamic      — `Dynamic[T]` + `dynamic name: body` macro
+##   - intonaco/reactive/dsl/each         — `eachItem` over `CollectionSignal`
+##   - intonaco/reactive/primitives/signal       — `Signal[T]` + `signals:` macro
+##   - intonaco/reactive/primitives/collection   — `CollectionSignal[T]`
+##   - intonaco/reactive/dsl/derive       — `derive` / `keep` / `fold` (collection algebra)
+##   - intonaco/reactive/dsl/scan         — `scan` (collection delta fold)
+##   - intonaco/reactive/primitives/scope        — `newScope` / `withScope` / `dispose`
+##   - intonaco/reactive/primitives/speculative  — `speculative:` blocks
+##   - intonaco/reactive/dsl/animation    — tween / spring / frame clock
+##   - intonaco/reactive/primitives/context      — `provide T: v` / `use T`
 ##   - intonaco/reactive/capabilities — cap concept primitives
 ##   - intonaco/task/core             — task primitive + spawn variants
 ##   - intonaco/task/supervisor       — supervisor: macro + strategies

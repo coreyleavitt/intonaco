@@ -8,10 +8,10 @@
 ## runAfterPropagation. The deferred action runs after the worklist drains.
 
 import std/unittest
-import intonaco/reactive/scope
-import intonaco/reactive/signal
-import intonaco/reactive/binding
-import intonaco/reactive/subscribable   # runAfterPropagation
+import intonaco/reactive/primitives/scope
+import intonaco/reactive/primitives/signal
+import intonaco/reactive/dsl/binding
+import intonaco/reactive/primitives/subscribable   # runAfterPropagation
 
 suite "runAfterPropagation":
 

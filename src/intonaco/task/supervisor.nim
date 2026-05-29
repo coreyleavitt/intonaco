@@ -21,7 +21,7 @@ import chronos/contextvars
 import ./core
 import ./group
 
-import intonaco/reactive/scope
+import intonaco/reactive/primitives/scope
 import intonaco/reactive/capabilities
 import intonaco/journal/events as jev
 import intonaco/journal/log

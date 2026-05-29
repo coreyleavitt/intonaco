@@ -28,7 +28,7 @@
 ## compile time along statically-known supervisor paths.
 
 import std/[macros, strutils, tables, sets]
-import ./context
+import ./primitives/context
 
 type
   FsReadCap*    = ref object   ## read from local filesystem

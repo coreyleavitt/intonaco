@@ -15,7 +15,7 @@
 ## the parent disposes its children, which cancels their Futures.
 
 import chronos
-import intonaco/reactive/scope
+import intonaco/reactive/primitives/scope
 import intonaco/journal/events
 import intonaco/journal/log
 import ./types
