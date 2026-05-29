@@ -20,6 +20,42 @@
 ## tears them all down.
 
 
+macro eachDelta*(src: typed, deltaIdent: untyped, body: untyped): untyped =
+  ## Observe each delta of `src` as it fires; run `body` with the delta
+  ## bound to `deltaIdent`. The substrate's public seam for "side-effect-
+  ## on-delta" — wraps the private `onDelta` floor with a named, walker-
+  ## reachable surface for substrate-author consumers (fresco's
+  ## bindCollection, devtools-style widgets).
+  ##
+  ## Usage:
+  ##   collections:
+  ##     items = newSeq[int]()
+  ##   eachDelta items, d:
+  ##     case d.kind
+  ##     of dkInsert: target.setRow(d.insertIdx, $d.insertVal)
+  ##     of dkRemove: target.eraseRow(d.removeIdx)
+  ##     else: discard
+  ##
+  ## Walker discipline: `src` is implicitly the only declared dep. The
+  ## body is a closure passed to `onDelta`; the walker skips lambda
+  ## bodies (deferred-execution context). Opaque side effects (IO,
+  ## mutation of captured locals) are allowed — that's the point of the
+  ## seam. Body fires at `src.height + 1`, scope-bound via `onDelta`'s
+  ## cleanup machinery.
+  ##
+  ## Modality: works over both `CollectionSignal[T]` (static) and
+  ## `DynamicCollection[T]` (dynamic) — both inherit `ReactiveCollection[T]`
+  ## so `onDelta`'s dispatch resolves without modality branching here.
+  expectKind(deltaIdent, nnkIdent)
+  let srcType = src.getTypeInst
+  if srcType.kind != nnkBracketExpr or srcType.len < 2:
+    error("eachDelta: source must be a reactive collection (" &
+          "CollectionSignal[T] or DynamicCollection[T])", src)
+  let elemType = srcType[1]
+  result = quote do:
+    `src`.onDelta proc(`deltaIdent`: Delta[`elemType`]) {.closure.} =
+      `body`
+
 proc eachItem*[T](src: CollectionSignal[T],
                   body: proc(item: T) {.closure.}) =
   ## Initial seed: for each item currently in `src`, spawn a scope, run
