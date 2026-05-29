@@ -73,7 +73,7 @@ type
     group: TaskGroup
     lifecycle: Lifecycle
     maxRestarts: int
-    within: Duration
+    within: chronos.Duration
     restartTimes: seq[Moment]
     mountFactories: Table[ptr Mount, ChildFactory]
       ## Indexed by the raw Mount ref's memory address (Mount is a
@@ -91,7 +91,7 @@ type
   Supervisor* = ref object of RootObj
     strategy*: Strategy
     maxRestarts*: int
-    within*: Duration
+    within*: chronos.Duration
     children: seq[ChildState]
     adoptedGroups: seq[AdoptedGroup]
     wakeup: Future[void]
@@ -152,7 +152,7 @@ proc shouldRestart(lifecycle: Lifecycle, failed: bool): bool =
   of lcTransient: failed
   of lcTemporary: false
 
-proc trimWindow(times: var seq[Moment], now: Moment, window: Duration) =
+proc trimWindow(times: var seq[Moment], now: Moment, window: chronos.Duration) =
   ## Drop entries older than `window` from the front. Uses a single
   ## scan + one slice instead of repeated O(N) `delete(0)` left-shifts.
   var keep = 0
