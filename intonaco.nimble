@@ -52,18 +52,20 @@ task test, "run intonaco's standalone tests":
   for t in tests:
     exec "nim r --hints:off --warnings:off --path:src " & t
 
-task strictcheck, "compile-probe the -d:intonacoStrict guarantees":
-  # A strict error can't live in a file the `test` loop runs, so the
-  # discipline is regression-checked here via the compiler's exit code.
-  const opts = "-d:intonacoStrict --hints:off --warnings:off --path:src "
-  # MUST be a hard error under strict (a C-shape binding with unbaked dep):
+task compileprobes, "compile-probe the unconditional substrate-discipline gates":
+  # Inverse-test probes — must NOT compile. M-ε.3 made the static-gate
+  # unconditional (no `-d:intonacoStrict` flag); these probes verify
+  # the gate fires by default.
+  const opts = "--hints:off --warnings:off --path:src "
+  # MUST be a compile error (a C-shape binding with unbaked dep):
   for p in ["tests/test_binding_strict_fail.nim"]:
     exec "if nim check " & opts & p &
-      "; then echo 'EXPECTED STRICT ERROR: " & p & "'; exit 1; else exit 0; fi"
-  # MUST be a hard error under any mode (M-δ modal quarantine):
+      "; then echo 'EXPECTED COMPILE ERROR: " & p & "'; exit 1; else exit 0; fi"
+  # MUST be a compile error (M-δ modal quarantine — dynamic-typed read
+  # inside a static binding body):
   for p in ["tests/test_modal_quarantine_fail.nim"]:
-    exec "if nim check --hints:off --warnings:off --path:src " & p &
+    exec "if nim check " & opts & p &
       "; then echo 'EXPECTED WALKER ERROR: " & p & "'; exit 1; else exit 0; fi"
-  # MUST compile under strict (all sources baked via signals:):
+  # MUST compile clean (all sources baked via signals:):
   for p in ["tests/test_binding_strict_ok.nim"]:
     exec "nim check " & opts & p

@@ -17,8 +17,8 @@
 ##
 ## `Dynamic[T]` is height-uncomposable by construction: the value never
 ## carries a baked `{.height.}` pragma, so a static `computed` declaring it
-## as a dep gets `composeHeight = none` and either falls to runtime under
-## relaxed mode or errors under `-d:intonacoStrict`. The escape is explicit,
+## as a dep gets `composeHeight = none` and is a compile error (M-ε.3
+## made the static-gate unconditional). The escape is explicit,
 ## greppable (the user wrote `dynamic name: ...`), and cannot masquerade as
 ## statically scheduled.
 
@@ -75,8 +75,9 @@ macro dynamic*(name: untyped, body: untyped): untyped =
   ##     tabs[activeTab.get()].title.get()
   ##
   ## A static `computed` declaring `visibleContent` as a dep is a compile
-  ## error under `-d:intonacoStrict` (no baked height); it falls to the
-  ## dynamic floor under the relaxed default. Reads of `visibleContent`
-  ## inside a static body are rejected by the walker (type-quarantine).
+  ## error (no baked height) — M-ε.3 made the static-gate unconditional;
+  ## the dynamic tier IS the named escape, used at the read site rather
+  ## than as a fallback. Reads of `visibleContent` inside a static body
+  ## are rejected by the walker (type-quarantine).
   result = quote do:
     let `name` = dynamicComputed(proc(): auto = `body`)

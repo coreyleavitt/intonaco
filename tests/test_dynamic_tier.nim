@@ -12,7 +12,7 @@ import intonaco/reactive       # Dynamic[T], dynamicComputed, `dynamic` macro
 suite "C shape dynamic tier — the four shapes":
 
   test "D1. `dynamic name = body` produces Dynamic[T]; auto-tracked":
-    let n = signalC(10)
+    let n {.height: 0.} = signalC(10)
     dynamic doubled: n.get() * 2     # `.get()` auto-tracks n
     check doubled() == 20
     n.set(7);  check doubled() == 14
@@ -33,14 +33,14 @@ suite "C shape dynamic tier — the four shapes":
     check bakedHeight(title) == 0
 
   test "D3. dynamic composition — dynamic reading another dynamic":
-    let n = signalC(2)
+    let n {.height: 0.} = signalC(2)
     dynamic doubled: n.get() * 2
     dynamic quadrupled: doubled.get() * 2
     check quadrupled() == 8
     n.set(5); check quadrupled() == 20
 
   test "D4. cross-tier wall (recap of test 11) — STATIC reading Dynamic fails":
-    let a = signalC(0)
+    let a {.height: 0.} = signalC(0)
     dynamic d: 42
     check not compiles(
       block:
@@ -49,7 +49,7 @@ suite "C shape dynamic tier — the four shapes":
 
   test "D5. `each` over CollectionSignal — initial spawn, insert, remove":
     var rendered: seq[string] = @[]
-    let names = collectionC[string](@["alice", "bob"])
+    let names {.height: 0.} = collectionC[string](@["alice", "bob"])
     eachItem(names) do (name: string):
       effect []:
         rendered.add "render: " & name
@@ -70,8 +70,8 @@ suite "C shape dynamic tier — the four shapes":
     check names.get() == @["bob", "charlie", "dana"]
 
   test "D6. `each` body can reference outer signals; reactivity re-fires":
-    let prefix = signalC("name")
-    let names = collectionC[string](@["alice", "bob"])
+    let prefix {.height: 0.} = signalC("name")
+    let names {.height: 0.} = collectionC[string](@["alice", "bob"])
     var rendered: seq[string] = @[]
     eachItem(names) do (n: string):
       effect [prefix]:
@@ -84,8 +84,8 @@ suite "C shape dynamic tier — the four shapes":
     check rendered[^2..^1] == @["user: alice", "user: bob"]
 
   test "D7. lifecycle: remove disposes the per-item effect cleanly":
-    let prefix = signalC("v")
-    let names = collectionC[string](@["x", "y", "z"])
+    let prefix {.height: 0.} = signalC("v")
+    let names {.height: 0.} = collectionC[string](@["x", "y", "z"])
     var rendered: seq[string] = @[]
     eachItem(names) do (n: string):
       effect [prefix]:

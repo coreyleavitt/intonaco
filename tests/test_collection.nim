@@ -81,7 +81,8 @@ suite "CollectionSignal: core delta emission":
     dispose(root)
 
   test "plain reactive observers re-fire on every delta kind":
-    let c = collectionC(@[1, 2, 3])
+    collections:
+      c = @[1, 2, 3]
     var runs = 0
     discard createRoot:
       effect [c]:

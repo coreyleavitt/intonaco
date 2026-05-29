@@ -6,9 +6,10 @@
 
 {.experimental: "callOperator".}
 
-import intonaco/reactive
+include intonaco/reactive_internal   # uses substrate-internal newDynamicReactive
 
-let trigger = signalC(0)
+signals:
+  trigger = 0
 let dyn = newDynamicReactive[int](@[1, 2, 3])
 
 effect [trigger]:               # ← `dyn` not in deps; reading it must error

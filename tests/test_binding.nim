@@ -13,7 +13,7 @@ suite "C shape (sugared): the four core behaviors":
 
   test "1. counter — source + derived + effect":
     var rendered: seq[string] = @[]
-    let count = signalC(0)
+    let count {.height: 0.} = signalC(0)
     computed doubled, [count]:
       count * 2
     effect [count, doubled]:
@@ -26,7 +26,7 @@ suite "C shape (sugared): the four core behaviors":
     ]
 
   test "2. diamond — glitch-free":
-    let a = signalC(0)
+    let a {.height: 0.} = signalC(0)
     computed b, [a]: a
     computed c, [a]: a
     var seen: seq[(int, int)] = @[]
@@ -37,7 +37,7 @@ suite "C shape (sugared): the four core behaviors":
     check seen.len == 3
 
   test "3. heights compose without inference (4-deep)":
-    let a = signalC(0)
+    let a {.height: 0.} = signalC(0)
     computed b, [a]: a
     computed c, [b]: b
     computed d, [c]: c
@@ -47,8 +47,8 @@ suite "C shape (sugared): the four core behaviors":
     a.set(42); check d.peek() == 42
 
   test "4a. missed dep DIRECT → COMPILE ERROR (the stale footgun is closed)":
-    let a = signalC(10)
-    let b = signalC(100)
+    let a {.height: 0.} = signalC(10)
+    let b {.height: 0.} = signalC(100)
     # Pre-fix: declaring `[a]` while the body reads `b` was a silent stale
     # bug surface. The `noUndeclaredSignals` walker now rejects it at sem
     # time — `b` resolves to a `Signal[int]` (declared deps were shadowed
@@ -68,7 +68,7 @@ suite "C shape (sugared): the four core behaviors":
     a.set(20);  check rendered == @[110, 210, 220]
 
   test "4c. opaque callee in body → COMPILE ERROR (RootEffect gate)":
-    let a = signalC(0)
+    let a {.height: 0.} = signalC(0)
     # An indirect call via a proc value: the compiler can't see through it,
     # so the inferred tag set falls to `RootEffect`. A reactive read could
     # be hiding inside. The walker rejects it unless the callee declares
@@ -80,9 +80,9 @@ suite "C shape (sugared): the four core behaviors":
           discard a + fn())
 
   test "4b. missed dep TRANSITIVE (helper reads a signal) → COMPILE ERROR":
-    let hidden = signalC(7)
+    let hidden {.height: 0.} = signalC(7)
     proc readsHidden(): int = hidden.get() + 1   # tag-inferred ReactiveRead
-    let a = signalC(10)
+    let a {.height: 0.} = signalC(10)
     # The body never names `hidden` directly — the transitive read is hidden
     # inside `readsHidden`. The walker catches it via Nim's effect inference:
     # `readsHidden` has `ReactiveRead` in its inferred tags, and isn't `peek`.
@@ -97,8 +97,8 @@ suite "C shape (sugared): a small fresco-style panel":
 
   test "5. todo-progress panel — 2 sources, 3 computeds, 1 render":
     var painted: seq[string] = @[]
-    let items = signalC(10)
-    let done  = signalC(3)
+    let items {.height: 0.} = signalC(10)
+    let done {.height: 0.} = signalC(3)
 
     computed remaining, [items, done]:
       items - done
@@ -132,9 +132,9 @@ suite "C shape (sugared): a small fresco-style panel":
     ## No hidden subscriptions to discover. No inference to re-verify. No
     ## stale-bug surface beyond the visible brackets.
     var painted: seq[string] = @[]
-    let items  = signalC(10)
-    let done   = signalC(3)
-    let prefix = signalC("TASKS")   # new source
+    let items {.height: 0.} = signalC(10)
+    let done {.height: 0.} = signalC(3)
+    let prefix {.height: 0.} = signalC("TASKS")   # new source
 
     computed remaining, [items, done]:
       items - done
@@ -157,9 +157,9 @@ suite "C shape (sugared): a small fresco-style panel":
     check painted[^1] == "DONE: 7/12 (58%)  [12 total]"
 
   test "7. heights through the panel — composition is transparent":
-    let items  = signalC(0)
-    let done   = signalC(0)
-    let prefix = signalC("")
+    let items {.height: 0.} = signalC(0)
+    let done {.height: 0.} = signalC(0)
+    let prefix {.height: 0.} = signalC("")
     computed remaining, [items, done]:                  # h=1
       items - done
     computed pct, [items, done]:                        # h=1
@@ -224,20 +224,20 @@ suite "C shape: COMPILE-TIME height resolution (the real goal)":
     ## type-level quarantine that keeps the static fragment sound.
     dynamic d:
       42
-    let a = signalC(0)
+    let a {.height: 0.} = signalC(0)
     check not compiles(
       block:
         computed bad, [a]:
           a + d())
 
-  test "10. unbaked source → runtime fallback (non-strict path)":
-    ## A plain `signalC(5)` carries no `{.height.}` pragma. Under non-strict
-    ## the macro falls back to runtime composition (no pragma baked on the
-    ## result either — it leaves the static fragment). Glitch-free at runtime
-    ## either way; just not provably compile-time-scheduled.
-    let raw = signalC(5)
-    computed doubled, [raw]:
-      raw * 2
-    check bakedHeight(doubled) == -1       # not in the static fragment
-    check doubled.peek() == 10
-    raw.set(20); check doubled.peek() == 40
+  test "10. unbaked source → compile error (no silent runtime fallback)":
+    ## A plain `signalC(5)` carries no `{.height.}` pragma. Post-M-ε.3 the
+    ## relaxed fallback is gone: the binding refuses to compile rather
+    ## than silently dropping to runtime composition. Consumers either
+    ## bake their sources via `signals:` / `collections:`, or escape to
+    ## the dynamic tier via `dynamic name: body` — no third path.
+    check not compiles(block:
+      let raw = signalC(5)
+      computed doubled, [raw]:
+        raw * 2
+      discard doubled)

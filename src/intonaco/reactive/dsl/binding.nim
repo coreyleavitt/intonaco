@@ -3,8 +3,8 @@
 ## Each binding declares its dependencies syntactically in a bracket; heights
 ## compose at compile time over each dep's `{.height.}` pragma (see
 ## `primitives/height`); the resulting binding carries its own baked height
-## for downstream composition. Under `-d:intonacoStrict` an unbaked dep is a
-## hard compile error.
+## for downstream composition. An unbaked dep is a compile error
+## (M-ε.3 made the static-gate unconditional — no escape flag).
 ##
 ## Usage:
 ##   signals:

@@ -103,24 +103,20 @@ proc compileBindingInner*(
       result = nnkLetSection.newTree(
         nnkIdentDefs.newTree(withHeight(name, h), newEmptyNode(), ctor))
     else:
-      if defined(intonacoStrict):
-        error(strictKind & ": at least one dep has no resolvable compile-time " &
-              "height — declare the source via `signals:` or wrap the read " &
-              "in `dynamic:`", origDeps)
-      result = quote do:
-        let `name` = `primitive`(`deps`, proc(): auto = `bodyOut`)
+      error(strictKind & ": at least one dep has no resolvable compile-time " &
+            "height — declare the source via `signals:` / `collections:`, or " &
+            "wrap the read in `dynamic name: body` for the ◇-modality " &
+            "escape", origDeps)
   of ekEffectShape:
     if staticH.isSome:
       let hLit = newLit(staticH.get)
       result = quote do:
         `primitive`(`deps`, proc() = `bodyOut`, fixedHeight = `hLit`)
     else:
-      if defined(intonacoStrict):
-        error(strictKind & ": at least one dep has no resolvable compile-time " &
-              "height — declare the source via `signals:` or wrap the read " &
-              "in `dynamic:`", origDeps)
-      result = quote do:
-        `primitive`(`deps`, proc() = `bodyOut`)
+      error(strictKind & ": at least one dep has no resolvable compile-time " &
+            "height — declare the source via `signals:` / `collections:`, or " &
+            "wrap the read in `dynamic name: body` for the ◇-modality " &
+            "escape", origDeps)
 
 proc wrapDepsForInner*(innerSym: NimNode, name, deps, body: NimNode):
     NimNode {.compileTime.} =

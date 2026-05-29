@@ -14,7 +14,7 @@ suite "runAfterPropagation cancellation":
 
   test "tracer: returns a handle; action fires after worklist drains":
     var actionRan = false
-    let trigger = signalC(0)
+    let trigger {.height: 0.} = signalC(0)
     discard createRoot:
       effect [trigger]:
         let _ = trigger
@@ -24,7 +24,7 @@ suite "runAfterPropagation cancellation":
 
   test "cancel before drain prevents action from firing":
     var actionRan = false
-    let trigger = signalC(0)
+    let trigger {.height: 0.} = signalC(0)
     var captured: DeferredHandle = nil
     discard createRoot:
       effect [trigger]:
@@ -45,7 +45,7 @@ suite "runAfterPropagation cancellation":
     # captured `disposed` flag in user code.
     var actionRan = false
     var childScope: Scope = nil
-    let trigger = signalC(0)
+    let trigger {.height: 0.} = signalC(0)
     let rootScope = createRoot:
       # Registered in the root scope. Initial fire sees childScope=nil
       # and no-ops. After we install childScope, the disposer's deferred
@@ -69,7 +69,7 @@ suite "runAfterPropagation cancellation":
   test "detached: scope dispose does NOT cancel the action":
     var actionRan = false
     var childScope: Scope = nil
-    let trigger = signalC(0)
+    let trigger {.height: 0.} = signalC(0)
     let rootScope = createRoot:
       effect [trigger]:
         let _ = trigger
@@ -88,7 +88,7 @@ suite "runAfterPropagation cancellation":
 
   test "cancel is idempotent; double-cancel and nil are no-ops":
     var actionRan = false
-    let trigger = signalC(0)
+    let trigger {.height: 0.} = signalC(0)
     var captured: DeferredHandle = nil
     discard createRoot:
       effect [trigger]:
@@ -112,7 +112,7 @@ suite "runAfterPropagation cancellation":
     # one-shot semantics: deferred actions are fire-once, so a mid-flight
     # cancel has no in-flight invocation to abort.
     var runCount = 0
-    let trigger = signalC(0)
+    let trigger {.height: 0.} = signalC(0)
     var captured: DeferredHandle = nil
     discard createRoot:
       effect [trigger]:
@@ -151,7 +151,7 @@ suite "runAfterPropagation cancellation — properties":
     given preCancels in integers(0, 5)
     var ran = 0
     var handles: seq[DeferredHandle] = @[]
-    let trigger = signalC(0)
+    let trigger {.height: 0.} = signalC(0)
     discard createRoot:
       effect [trigger]:
         let _ = trigger
