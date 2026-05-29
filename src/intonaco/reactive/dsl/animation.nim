@@ -65,7 +65,7 @@ type
       target: Signal[float]
       startVal, endVal: float
       startMono: Moment
-      duration: Duration
+      duration: chronos.Duration
       easing: Easing
     of akSpring:
       springU0, springV0: seq[float]
@@ -94,7 +94,7 @@ const DefaultFPS* = 30
 
 var frameAnimations {.threadvar.}: seq[Animation]
 var frameClockTask {.threadvar.}: Future[void]
-var frameInterval {.threadvar.}: Duration
+var frameInterval {.threadvar.}: chronos.Duration
   ## All three are thread-locals tied to the chronos dispatcher that
   ## first called `startFrameClock` (typically via `tween`/`spring`).
   ## Single-dispatcher apps (the fresco default) are unaffected.
@@ -268,7 +268,7 @@ proc startFrameClock*(fps: int = DefaultFPS) =
   ## **If the clock is already running, `fps` is ignored.** To change
   ## the rate of a running clock, call `stopFrameClock()` first.
   if frameClockTask != nil and not frameClockTask.finished: return
-  if frameInterval == default(Duration):
+  if frameInterval == default(chronos.Duration):
     frameInterval = max(1, 1000 div fps).milliseconds
   frameClockTask = clockLoop()
 
@@ -280,12 +280,12 @@ proc stopFrameClock*() =
     frameClockTask.cancelSoon()
   frameClockTask = nil
   frameAnimations.setLen(0)
-  frameInterval = default(Duration)
+  frameInterval = default(chronos.Duration)
 
 # --- Public API: tween + spring ------------------------------------------
 
 proc tween*(s: Signal[float], target: float,
-            duration: Duration, easing = esLinear): Animation
+            duration: chronos.Duration, easing = esLinear): Animation
             {.discardable.} =
   ## Animate `s` from its current value to `target` over `duration`.
   ## If another animation (tween or spring) is already in flight
