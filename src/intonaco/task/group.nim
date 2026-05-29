@@ -67,7 +67,7 @@ proc joinAll*(g: TaskGroup) {.async: (raises: [CancelledError, CatchableError]).
     try: await m.future
     except CancelledError: raise   # the AWAITER was cancelled
     except CatchableError: discard
-  await sleepAsync(0.milliseconds)   # drain auto-remove callbacks
+  await sleepAsync(chronos.milliseconds(0))   # drain auto-remove callbacks
 
 proc setSpawnHook*(g: TaskGroup, hook: SpawnHook) =
   ## Internal — set by `Supervisor.adopt` to register a callback that
@@ -103,7 +103,7 @@ proc cancelAll*(g: TaskGroup) {.async: (raises: [CancelledError]).} =
     except CatchableError: discard
   # Give the dispatcher one tick to drain auto-remove callbacks
   # registered on each member's future.
-  await sleepAsync(0.milliseconds)
+  await sleepAsync(chronos.milliseconds(0))
 
 proc spawn*(g: TaskGroup, factory: ChildFactory): Result[Mount, GroupError] =
   ## Spawn a new member running `factory()`. Returns the Mount on
