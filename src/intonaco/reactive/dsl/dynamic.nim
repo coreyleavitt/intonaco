@@ -26,6 +26,7 @@
 
 import std/macros
 import ../primitives/subscribable   # Subscribable / trackRead / notify / ReactiveRead
+import ../primitives/scheduler
 import ../primitives/runtime        # createEffect (the internal floor)
 
 type

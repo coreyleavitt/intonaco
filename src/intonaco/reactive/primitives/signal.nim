@@ -22,6 +22,7 @@
 
 import std/macros
 import ./subscribable
+import ./scheduler
 import ./height
 import ./speculative
 import ./restoration

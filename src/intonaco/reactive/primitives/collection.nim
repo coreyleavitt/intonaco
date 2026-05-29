@@ -33,6 +33,7 @@
 
 import std/macros
 import ./subscribable
+import ./scheduler
 import ./speculative
 import ./height
 import intonaco/journal/events

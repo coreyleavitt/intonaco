@@ -20,6 +20,7 @@
 
 import std/sequtils
 import ./subscribable
+import ./scheduler
 import ./scope
 import ./collection
 import ./signal

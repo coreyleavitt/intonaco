@@ -22,12 +22,13 @@ export reactive
 # Substrate primitives — the runtime constructors substrate authors need
 # direct access to.
 import ./reactive/primitives/subscribable
+import ./reactive/primitives/scheduler
 import ./reactive/primitives/computation
 import ./reactive/primitives/runtime
 import ./reactive/primitives/deltafloor
 import ./reactive/primitives/restoration
 import ./reactive/primitives/convergence
-export subscribable, computation, runtime, deltafloor, restoration, convergence
+export subscribable, scheduler, computation, runtime, deltafloor, restoration, convergence
 
 # Analysis layer — for substrate templates that emit `noUndeclaredSignals`
 # walks, manipulate dep ASTs, or emit Diagnostics.
