@@ -38,7 +38,10 @@ time by a single ~30-line walker. The Lean over-approximation lemma
 unreachable in A — is satisfied **by construction** in C. The dynamic tier
 remains as the explicit, type-quarantined escape (`Dynamic[T]` and the
 `dynamic`/`each`/`mountWhen` family) — and the cross-tier wall is enforced
-at sem time by the same walker.
+at sem time by the same walker. Opaque/async/I/O work that responds to
+reactive change rides on a separate structural primitive — the
+**decide/act seam** (see [`seams.md`](seams.md)) — which is the substrate's
+single sanctioned exit from walker analysis into deferred-execution context.
 
 Validation: two spikes (`fresco/tests/spike_c_shape*` and
 `fresco/tests/spike_c_dynamic.nim`) prove the static fragment (10 tests,

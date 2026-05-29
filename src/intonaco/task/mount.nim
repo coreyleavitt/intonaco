@@ -34,7 +34,8 @@ import ./core
 template mountWhen*(boolSig: Signal[bool], body: untyped): untyped =
   ## Mount `body` (which must produce a `Mount`) while `boolSig` is true.
   ##
-  ## Decide / act seam (M10 direction C):
+  ## Decide / act seam (see `intonaco/docs/seams.md` for the named
+  ## architectural pattern):
   ##   * The `effect [boolSig]:` body computes ONLY the decision (the bool
   ##     value of `boolSig` at this propagation). It is walker-clean by
   ##     construction — no opaque/async call inside it.
@@ -42,6 +43,9 @@ template mountWhen*(boolSig: Signal[bool], body: untyped): untyped =
   ##     deferred closure. The closure is a lambda; the walker skips lambda
   ##     bodies (their reads execute in a separate reactive frame, draining
   ##     after the worklist quiesces).
+  ##   * Scope-affine binding (M-γ.2): the handle returned by
+  ##     `runAfterPropagation` is auto-cancelled on scope dispose — no
+  ##     captured `disposed` flag, no consumer-side state machine.
   ##
   ## The effect fires from `notify`, not from any task — the dispatcher's
   ## `currentScope` at that point is whatever the last coroutine left behind

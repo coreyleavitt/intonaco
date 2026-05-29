@@ -7,6 +7,7 @@ intonaco is the **compile-time-first reactive substrate** for Nim. It's the plat
 | You are... | Start here |
 |---|---|
 | Extending the substrate (writing a new walker pass, adding a research direction, building a sinopia-style frontend) | [`docs/extension-protocol.md`](docs/extension-protocol.md) — the canonical M-α platform reference |
+| Writing a substrate template that needs to invoke opaque / async / I/O work in response to reactive change (task spawn, journal write, HTTP request) | [`docs/seams.md`](docs/seams.md) — the decide/act seam |
 | Understanding the C-shape design (why explicit `[deps]` brackets, why the walker exists at all) | [`docs/rfc-c-shape-migration.md`](docs/rfc-c-shape-migration.md) |
 | Looking at the modal framing of the static/dynamic tier split | [`docs/rfc-modal-tiers.md`](docs/rfc-modal-tiers.md) |
 | Looking at the five-direction research roadmap | [`fresco/docs/roadmap-compile-time-research.md`](../fresco/docs/roadmap-compile-time-research.md) |
