@@ -67,7 +67,7 @@ proc noUndeclaredSignalReadPass*(node: NimNode, ctx: WalkContext): seq[Finding]
       fix: "add `" & node.repr & "` to the deps bracket or stop reading it",
       site: node)
 
-static: registerWalkPass(noUndeclaredSignalReadPass)
+registerWalkPass(noUndeclaredSignalReadPass)
 
 # ---- Pass 2: transitive reactive read via helper ---------------------------
 
@@ -91,7 +91,7 @@ proc noUndeclaredTransitiveReadPass*(node: NimNode, ctx: WalkContext):
         site: node)
       return
 
-static: registerWalkPass(noUndeclaredTransitiveReadPass)
+registerWalkPass(noUndeclaredTransitiveReadPass)
 
 # ---- Pass 3: opaque callee (RootEffect or indirect proc value) -------------
 
@@ -126,4 +126,4 @@ proc noOpaqueCalleePass*(node: NimNode, ctx: WalkContext): seq[Finding]
            "or move the call out of the binding body",
       site: node)
 
-static: registerWalkPass(noOpaqueCalleePass)
+registerWalkPass(noOpaqueCalleePass)

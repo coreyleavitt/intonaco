@@ -24,7 +24,7 @@ proc no42Pass(node: NimNode, ctx: WalkContext): seq[Finding] {.nimcall.} =
       fix: "use a different value",
       site: node)
 
-static: registerWalkPass(no42Pass)
+registerWalkPass(no42Pass)
 
 # A note-severity pass: 99 is suspicious but not fatal.
 proc note99Pass(node: NimNode, ctx: WalkContext): seq[Finding] {.nimcall.} =
@@ -37,7 +37,7 @@ proc note99Pass(node: NimNode, ctx: WalkContext): seq[Finding] {.nimcall.} =
       fix: "consider an alternative",
       site: node)
 
-static: registerWalkPass(note99Pass)
+registerWalkPass(note99Pass)
 
 # A dep-aware pass: errors only if ctx.deps is empty AND body contains 77.
 # Demonstrates that passes can use ctx.deps to vary their check.
@@ -51,7 +51,9 @@ proc dep77Pass(node: NimNode, ctx: WalkContext): seq[Finding] {.nimcall.} =
       fix: "declare at least one dep, or stop using 77",
       site: node)
 
-static: registerWalkPass(dep77Pass)
+registerWalkPass(dep77Pass)
+
+import intonaco/reactive/analysis/passes_core   # registers the three core passes
 
 suite "M-α.2 — walker pass registry":
 
@@ -88,3 +90,16 @@ suite "M-α.2 — walker pass registry":
     # The dep value isn't reactive-typed so NoUndeclaredSignalReadPass stays
     # silent; only dep77Pass cares about ctx.deps here.
     check compiles(runAnalysis(77, [42]))
+
+  test "registeredPasses() enumerates the registered pass names":
+    # CT introspection — verify the three core passes + the custom passes
+    # registered above all appear in the registry. Tooling / IDEs / devtools
+    # use this to surface "what discipline is enforced."
+    static:
+      let names = registeredPasses()
+      doAssert "no42Pass" in names
+      doAssert "note99Pass" in names
+      doAssert "dep77Pass" in names
+      doAssert "noUndeclaredSignalReadPass" in names
+      doAssert "noUndeclaredTransitiveReadPass" in names
+      doAssert "noOpaqueCalleePass" in names

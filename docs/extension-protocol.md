@@ -83,15 +83,31 @@ Each `Finding` corresponds 1-to-1 with a `Diagnostic`; the orchestrator fills in
 
 ### Registration
 
-A pass registers itself at module load time via a `static:` block:
+A pass registers itself at module load time:
 
 ```nim
-static: registerWalkPass(myPass)
+registerWalkPass(myPass)
 ```
+
+`registerWalkPass` is a macro that captures the proc symbol's name and emits the compile-time registration; you don't need a surrounding `static:` block.
 
 When any consumer of the analysis platform (binding macro, `analyze` call, etc.) runs in the same compilation, `myPass` is in its registry.
 
 Registration is per-compilation. A test file that imports your pass module gets the pass; an unrelated test file in the same suite doesn't (because it didn't import your module). This is by design — it's exactly the Nim semantics you expect, no additional mechanism required.
+
+### Introspection
+
+To enumerate the registered passes (for tooling, devtools surfacing, IDE integration, or just debugging "is my pass actually registered?"), call `registeredPasses()` at compile time:
+
+```nim
+static:
+  for name in registeredPasses():
+    echo name
+  # → noUndeclaredSignalReadPass, noUndeclaredTransitiveReadPass,
+  #   noOpaqueCalleePass, myPass
+```
+
+The returned `seq[string]` is the names in registration order. The order can matter for cascading-pause grouping; more on this in the [determinism rules](#determinism--extensibility-rules).
 
 ### Descent control
 
@@ -132,9 +148,9 @@ The walker is what runs analysis on binding bodies. For new substrate templates 
 ```nim
 import intonaco/substrate
 
-# A hypothetical `traced name, [deps]: body` — same as computed but emits
-# a journal event each fire. Pretend `tracedC` is a runtime primitive you
-# defined elsewhere.
+# Same shape used by every kit-built substrate template: a custom inner-typed
+# macro deferring to the kit's compileBindingInner, plus an outer untyped
+# macro that wraps deps in Subscribable(...) and invokes the inner.
 
 macro tracedInner(name: untyped, deps: typed, body: untyped, origDeps: untyped): untyped =
   compileBindingInner(name, deps, body, origDeps,
@@ -145,6 +161,40 @@ macro traced*(name, deps, body): untyped =
 ```
 
 For specialized templates that don't fit the computed/effect shape (scan's height-plus-one policy, derive's no-deps shape, future modality-specific macros), the kit also exposes lower-level helpers: `extractDepSyms`, `buildShadowLets`, `rewriteAndAnalyze`. See `reactive/dsl/scan.nim` for a worked example using just the helpers.
+
+### Worked kit example
+
+`examples/extensions/traced_macro.nim` is the canonical worked example for the substrate kit. It defines a `traced name, [deps]: body` template — semantically identical to `computed` (same dep declaration, walker discipline, compile-time height baking) but layered on a custom `tracedC` runtime primitive that increments a module-level counter on each fire.
+
+The relevant pieces:
+
+```nim
+# 1. The custom primitive — wraps computedC with the new behavior.
+proc tracedC*[T](deps: openArray[Subscribable],
+                 body: proc(): T {.closure.},
+                 fixedHeight = -1): Signal[T] {.gcsafe.} =
+  {.cast(gcsafe).}:
+    proc tracedBody(): T =
+      inc TRACE_COUNTER          # the new behavior
+      body()
+    computedC(deps, tracedBody, fixedHeight)
+
+# 2. The kit-built macros — same shape every time.
+macro tracedInner(name, deps, body, origDeps): untyped =
+  compileBindingInner(name, deps, body, origDeps,
+                      bindSym"tracedC", ekComputedShape, "traced")
+macro traced*(name, deps, body): untyped =
+  wrapDepsForInner(bindSym"tracedInner", name, deps, body)
+```
+
+What this demonstrates:
+- The kit composes new substrate templates from existing primitives — `tracedC` builds on `computedC` by wrapping the body, but to the user it looks like a first-class substrate primitive.
+- The kit-built macro inherits ALL the substrate discipline (walker checks, height baking, dep-rewrite, runAnalysis integration) automatically.
+- Adding a substrate template family is ~7 lines of macro plus the primitive's behavior.
+
+The sinopia trace frontend's `traceSignal` / `traceTransition` templates will use exactly this shape when sinopia lands; `traced_macro.nim` is the pattern.
+
+`tests/test_traced_example.nim` exercises the example.
 
 ## Worked example walkthrough
 

@@ -10,7 +10,7 @@
 ## becomes a warning, `sevSilent` is the expert/verbose-only channel.
 ##
 ## Registration is module-scoped at compile time; pass-author modules execute
-## `static: registerWalkPass(myPass)` at top level. By the time any binding
+## `registerWalkPass(myPass)` at top level. By the time any binding
 ## macro fires `runAnalysis`, the pass-author module has been imported and
 ## registration has happened.
 ##
@@ -46,18 +46,39 @@ type
 
   PassCheck* = proc(node: NimNode, ctx: WalkContext): seq[Finding] {.nimcall.}
 
-var registry {.compileTime.}: seq[PassCheck]
+  RegisteredPass* = object
+    ## A registered pass plus its symbol name (captured at registration time
+    ## by the `registerWalkPass` macro). The name is for introspection /
+    ## tooling — see `registeredPasses()`.
+    name*: string
+    check*: PassCheck
 
-proc registerWalkPass*(p: PassCheck) {.compileTime.} =
-  ## Register a pass. Called from a pass-author module's `static:` block.
-  registry.add p
+var registry {.compileTime.}: seq[RegisteredPass]
+
+macro registerWalkPass*(p: typed): untyped =
+  ## Register a pass at compile time. Captures the proc symbol's name so
+  ## tooling can enumerate the registry via `registeredPasses()`.
+  ##
+  ## Call directly from a module's top level — no surrounding `static:`
+  ## block is needed; the macro handles compile-time registration internally.
+  let nameLit = newLit(p.repr)
+  result = quote do:
+    static:
+      registry.add RegisteredPass(name: `nameLit`, check: `p`)
+
+proc registeredPasses*(): seq[string] {.compileTime.} =
+  ## Enumerate the names of every walker pass registered in this compilation.
+  ## For tooling / debugging — IDEs and devtools can surface "what discipline
+  ## is enforced" without instrumenting individual pass modules.
+  for entry in registry:
+    result.add entry.name
 
 proc walkAst*(node: NimNode, ctx: WalkContext,
               findings: var seq[Finding]) {.compileTime.} =
   ## Recursive walk: apply every registered pass at this node; descend into
   ## children unless the node is a lambda/proc body.
-  for p in registry:
-    findings.add p(node, ctx)
+  for entry in registry:
+    findings.add entry.check(node, ctx)
   if node.kind notin {nnkLambda, nnkProcDef, nnkFuncDef, nnkDo}:
     for c in node:
       walkAst(c, ctx, findings)

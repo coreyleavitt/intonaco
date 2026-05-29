@@ -24,7 +24,7 @@ proc leakyVocabPass(node: NimNode, ctx: WalkContext): seq[Finding] {.nimcall.} =
       fix: "use a non-leaky message",
       site: node)
 
-static: registerWalkPass(leakyVocabPass)
+registerWalkPass(leakyVocabPass)
 
 # A clean pass for the regression line.
 proc cleanPass(node: NimNode, ctx: WalkContext): seq[Finding] {.nimcall.} =
@@ -37,7 +37,7 @@ proc cleanPass(node: NimNode, ctx: WalkContext): seq[Finding] {.nimcall.} =
       fix: "use a value in range",
       site: node)
 
-static: registerWalkPass(cleanPass)
+registerWalkPass(cleanPass)
 
 # Cascading-pause test: a sevError ROOT with breaksPreconditionOf=[X] +
 # a sevNote on subject X. analyze() should suppress the note (paused by root).
@@ -53,7 +53,7 @@ proc rootErrorPass(node: NimNode, ctx: WalkContext): seq[Finding] {.nimcall.} =
       site: node,
       breaksPreconditionOf: @[SignalId("downstream")])
 
-static: registerWalkPass(rootErrorPass)
+registerWalkPass(rootErrorPass)
 
 proc downstreamNotePass(node: NimNode, ctx: WalkContext): seq[Finding] {.nimcall.} =
   if node.kind == nnkIntLit and node.intVal == 100:
@@ -65,7 +65,7 @@ proc downstreamNotePass(node: NimNode, ctx: WalkContext): seq[Finding] {.nimcall
       fix: "ensure the root cause is fixed first",
       site: node)
 
-static: registerWalkPass(downstreamNotePass)
+registerWalkPass(downstreamNotePass)
 
 suite "M-α.4 — Diagnostic emission":
 

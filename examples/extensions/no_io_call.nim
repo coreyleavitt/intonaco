@@ -65,4 +65,4 @@ proc noIOCallPass*(node: NimNode, ctx: WalkContext): seq[Finding]
         site: node)
       return
 
-static: registerWalkPass(noIOCallPass)
+registerWalkPass(noIOCallPass)
