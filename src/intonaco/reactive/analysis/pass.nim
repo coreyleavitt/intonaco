@@ -20,19 +20,23 @@
 ## descend into closures (e.g. guarded productivity #46), the hook gets added
 ## then.
 
-import std/[macros]
+import std/[macros, options]
 import ./diagnostic
 
 type
   Finding* = object
-    ## A single check result from a pass. Lightweight compared to the full
-    ## `Diagnostic` from `diagnostic.nim` — passes don't have to assemble
-    ## subject/glossary/breaksPreconditionOf at construction time. M-α.4
-    ## wires the Finding → Diagnostic translation.
+    ## A check result from a pass — the structured draft of a `Diagnostic`.
+    ## The pass owns the SEMANTIC content (subject, symptom, fix, the
+    ## consequence rule, the cascading-pause breaks-precondition list); the
+    ## orchestrator (`analyze`) fills in the bookkeeping (id, source-site
+    ## translation, validate + group + surfaced filtering).
     severity*: Severity
-    message*: string
-    site*: NimNode
-    rule*: GlossaryTerm
+    rule*: GlossaryTerm                ## the consequence vocabulary
+    subject*: SignalId                 ## empty string if no specific subject
+    symptom*: string                   ## what's wrong — NO internal vocab
+    fix*: string                       ## actionable; NO internal vocab
+    site*: NimNode                     ## for Nim's `error()`/`warning()` location
+    breaksPreconditionOf*: seq[SignalId]   ## subjects this finding breaks (group())
 
   WalkContext* = object
     ## Information about the binding being walked. Most passes ignore this;
@@ -46,8 +50,6 @@ var registry {.compileTime.}: seq[PassCheck]
 
 proc registerWalkPass*(p: PassCheck) {.compileTime.} =
   ## Register a pass. Called from a pass-author module's `static:` block.
-  ## Idempotency is the caller's responsibility (today: register once per
-  ## module-import; future: a `registeredPasses()` introspection helper).
   registry.add p
 
 proc walkAst*(node: NimNode, ctx: WalkContext,
@@ -60,10 +62,30 @@ proc walkAst*(node: NimNode, ctx: WalkContext,
     for c in node:
       walkAst(c, ctx, findings)
 
-macro runAnalysis*(body: typed, deps: typed): untyped =
-  ## Walk `body` with every registered pass. Collect findings. Emit errors /
-  ## warnings via Nim's compile-time `error`/`warning`. Return `body` on
-  ## success (passthrough).
+proc findingToDiagnostic*(f: Finding, id: int): Diagnostic {.compileTime.} =
+  ## Translate a `Finding` into a full `Diagnostic` for contract enforcement
+  ## (`validate` + `group` + `render`). Source-site is built from the NimNode
+  ## via `siteOf`.
+  Diagnostic(
+    id: DiagnosticId(id),
+    severity: f.severity,
+    rule: f.rule,
+    subject: f.subject,
+    symptom: f.symptom,
+    fix: f.fix,
+    site: siteOf(f.site),
+    breaksPreconditionOf: f.breaksPreconditionOf,
+    pausedBy: none(DiagnosticId)
+  )
+
+proc analyze*(body: NimNode, deps: NimNode): seq[Finding] {.compileTime.} =
+  ## Walk `body` with every registered pass; translate each finding into a
+  ## `Diagnostic`; assert no internal-vocabulary leakage via `validate`; apply
+  ## `group` for cascading-pause; return ONLY the surfaced findings (those not
+  ## paused by a sevError root).
+  ##
+  ## Stateless and pure at compile time — callable from `static:` blocks for
+  ## introspection.
   var depSyms: seq[NimNode]
   for d in deps:
     var sym = d
@@ -74,9 +96,32 @@ macro runAnalysis*(body: typed, deps: typed): untyped =
   let ctx = WalkContext(deps: depSyms, body: body)
   var findings: seq[Finding]
   walkAst(body, ctx, findings)
-  for f in findings:
+  var diagnostics: seq[Diagnostic]
+  for i, f in findings:
+    let d = findingToDiagnostic(f, i + 1)
+    let leaks = validate(d)
+    doAssert leaks.len == 0,
+      "walker pass leaked internal vocabulary " & $leaks &
+      " in symptom/fix; subject=" & string(f.subject) & " symptom=" & f.symptom
+    diagnostics.add d
+  let surfacedDiags = surfaced(group(diagnostics))
+  var keptIds: seq[int]
+  for d in surfacedDiags:
+    keptIds.add int(d.id)
+  for i, f in findings:
+    if (i + 1) in keptIds:
+      result.add f
+
+macro runAnalysis*(body: typed, deps: typed): untyped =
+  ## Walk `body` with every registered pass via `analyze`; render each
+  ## surviving finding through `Diagnostic.render`; emit via Nim's compile-
+  ## time `error`/`warning`. Return `body` on success.
+  let surf = analyze(body, deps)
+  for f in surf:
+    let d = findingToDiagnostic(f, 0)
+    let msg = render(d)
     case f.severity
-    of sevError: error(f.message, f.site)
-    of sevNote: warning(f.message, f.site)
+    of sevError: error(msg, f.site)
+    of sevNote: warning(msg, f.site)
     of sevSilent: discard
   result = body

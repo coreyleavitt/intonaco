@@ -18,9 +18,11 @@ proc no42Pass(node: NimNode, ctx: WalkContext): seq[Finding] {.nimcall.} =
   if node.kind == nnkIntLit and node.intVal == 42:
     result.add Finding(
       severity: sevError,
-      message: "the literal 42 is forbidden by no42Pass",
-      site: node,
-      rule: gtValueRule)
+      rule: gtValueRule,
+      subject: SignalId("forty-two"),
+      symptom: "the literal 42 was used",
+      fix: "use a different value",
+      site: node)
 
 static: registerWalkPass(no42Pass)
 
@@ -29,9 +31,11 @@ proc note99Pass(node: NimNode, ctx: WalkContext): seq[Finding] {.nimcall.} =
   if node.kind == nnkIntLit and node.intVal == 99:
     result.add Finding(
       severity: sevNote,
-      message: "the literal 99 is suspicious (note from note99Pass)",
-      site: node,
-      rule: gtRuntimeScheduled)
+      rule: gtRuntimeScheduled,
+      subject: SignalId("ninety-nine"),
+      symptom: "the literal 99 is suspicious",
+      fix: "consider an alternative",
+      site: node)
 
 static: registerWalkPass(note99Pass)
 
@@ -41,9 +45,11 @@ proc dep77Pass(node: NimNode, ctx: WalkContext): seq[Finding] {.nimcall.} =
   if node.kind == nnkIntLit and node.intVal == 77 and ctx.deps.len == 0:
     result.add Finding(
       severity: sevError,
-      message: "77 is forbidden when deps bracket is empty",
-      site: node,
-      rule: gtValueRule)
+      rule: gtValueRule,
+      subject: SignalId("seventy-seven"),
+      symptom: "77 was used with no deps declared",
+      fix: "declare at least one dep, or stop using 77",
+      site: node)
 
 static: registerWalkPass(dep77Pass)
 

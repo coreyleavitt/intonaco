@@ -61,11 +61,11 @@ proc noUndeclaredSignalReadPass*(node: NimNode, ctx: WalkContext): seq[Finding]
      t[0].repr in reactiveTypes:
     result.add Finding(
       severity: sevError,
-      message: "`" & node.repr & "`: reactive (" & t[0].repr & "[_]) read " &
-               "inside a `computed`/`effect` body that isn't in the deps " &
-               "bracket. Add it to the brackets or stop reading it.",
-      site: node,
-      rule: gtValueRule)
+      rule: gtRuntimeScheduled,
+      subject: SignalId(node.repr),
+      symptom: "reactive read inside a binding body that isn't in the deps bracket",
+      fix: "add `" & node.repr & "` to the deps bracket or stop reading it",
+      site: node)
 
 static: registerWalkPass(noUndeclaredSignalReadPass)
 
@@ -83,12 +83,12 @@ proc noUndeclaredTransitiveReadPass*(node: NimNode, ctx: WalkContext):
     if tag.repr == "ReactiveRead":
       result.add Finding(
         severity: sevError,
-        message: "call to `" & callee.repr & "` transitively reads reactive " &
-                 "state (inferred `ReactiveRead`) but isn't reflected in the " &
-                 "deps bracket. Convert the helper to take values, or make " &
-                 "it its own `computed`.",
-        site: node,
-        rule: gtValueRule)
+        rule: gtRuntimeScheduled,
+        subject: SignalId(callee.repr),
+        symptom: "the call transitively reads reactive state but isn't " &
+                 "reflected in the deps bracket",
+        fix: "convert the helper to take values, or make it its own `computed`",
+        site: node)
       return
 
 static: registerWalkPass(noUndeclaredTransitiveReadPass)
@@ -104,12 +104,13 @@ proc noOpaqueCalleePass*(node: NimNode, ctx: WalkContext): seq[Finding]
   if callee.symKind in {nskVar, nskLet, nskParam}:
     result.add Finding(
       severity: sevError,
-      message: "call to `" & callee.repr & "` is an indirect call through " &
-               "a proc value — opaque to the classifier. A reactive read " &
-               "could hide behind it. Move the call out of the binding " &
-               "body, or call a concrete proc with a known effect set.",
-      site: node,
-      rule: gtRuntimeScheduled)
+      rule: gtRuntimeScheduled,
+      subject: SignalId(callee.repr),
+      symptom: "indirect call through a proc value — a reactive read could " &
+               "hide behind it",
+      fix: "use a concrete proc with a known effect set, or move the call " &
+           "out of the binding body",
+      site: node)
     return
   var seenRoot = false
   for tag in getTagsList(callee):
@@ -117,11 +118,12 @@ proc noOpaqueCalleePass*(node: NimNode, ctx: WalkContext): seq[Finding]
   if seenRoot and not forbidsReactive(callee):
     result.add Finding(
       severity: sevError,
-      message: "call to `" & callee.repr & "` is opaque (method dispatch / " &
-               "async / FFI). A reactive read could hide inside; annotate " &
-               "it `{.forbids: [ReactiveRead, ReactiveWrite].}` or move " &
-               "the call out of the binding body.",
-      site: node,
-      rule: gtRuntimeScheduled)
+      rule: gtRuntimeScheduled,
+      subject: SignalId(callee.repr),
+      symptom: "opaque call (async / dispatch / FFI) — a reactive read " &
+               "could hide inside",
+      fix: "annotate the callee `{.forbids: [ReactiveRead, ReactiveWrite].}` " &
+           "or move the call out of the binding body",
+      site: node)
 
 static: registerWalkPass(noOpaqueCalleePass)

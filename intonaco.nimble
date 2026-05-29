@@ -31,6 +31,7 @@ task test, "run intonaco's standalone tests":
     "tests/test_aggregators.nim",
     "tests/test_walker_passes.nim",
     "tests/test_kit.nim",
+    "tests/test_diagnostic_emission.nim",
     "tests/test_dynamic_tier.nim",
     # Substrate primitives + concept-layers, shape-agnostic.
     "tests/test_diamond_glitch.nim",
