@@ -27,6 +27,7 @@ task test, "run intonaco's standalone tests":
     "tests/test_binding.nim",
     "tests/test_binding_template_compose.nim",
     "tests/test_deferred.nim",
+    "tests/test_deferred_cancellation.nim",
     "tests/test_mountwhen.nim",
     "tests/test_aggregators.nim",
     "tests/test_walker_passes.nim",

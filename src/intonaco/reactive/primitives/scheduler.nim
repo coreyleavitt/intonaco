@@ -27,6 +27,7 @@
 ## which the walker skips (lambda bodies = deferred-execution context).
 
 import ./subscribable
+import ./scope
 
 # --- Reactive worklist ------------------------------------------------------
 
@@ -51,6 +52,27 @@ type DeferredAction* = proc() {.closure.}
   ## handling of raising observers. User code does NOT need to annotate the
   ## closure — captures of globals work.
 
+type DeferredHandle* = ref object
+  ## Opaque cancellation handle returned by `runAfterPropagation`. Substrate
+  ## consumers cancel through `cancel(h)` / observe with `cancelled(h)`; the
+  ## internal shape (scope binding, fired flag) is not exposed because
+  ## per-scope queue / priority work is a deliberate M-γ.2 non-goal — keeping
+  ## the fields private lets future revisions reshape the binding without
+  ## breaking call sites.
+  cancelledFlag: bool
+
+proc cancel*(h: DeferredHandle) {.gcsafe, raises: [].} =
+  ## Cancel a pending deferred action. Idempotent: re-cancelling, or
+  ## cancelling after the action has already fired (or been skipped because
+  ## it ran outside propagation), is a no-op.
+  if h != nil: h.cancelledFlag = true
+
+proc cancelled*(h: DeferredHandle): bool {.gcsafe, raises: [].} =
+  ## True iff `cancel(h)` was called on this handle. Always false for
+  ## handles returned outside propagation (the action ran synchronously
+  ## and there was nothing to cancel).
+  h != nil and h.cancelledFlag
+
 var gDeferred {.threadvar.}: seq[DeferredAction]
   ## Actions enqueued via `runAfterPropagation` during a `c.run()` — drained
   ## AFTER the reactive worklist settles. This is the substrate's "decide
@@ -59,8 +81,9 @@ var gDeferred {.threadvar.}: seq[DeferredAction]
   ## `effect`/`computed` body where the walker would (rightly) reject it.
   ## Implements direction (C) of the M10 substrate-design discussion.
 
-proc runAfterPropagation*(action: DeferredAction)
-    {.gcsafe, raises: [], forbids: [ReactiveRead, ReactiveWrite].} =
+proc runAfterPropagation*(action: DeferredAction): DeferredHandle
+    {.discardable, gcsafe, raises: [],
+      forbids: [ReactiveRead, ReactiveWrite].} =
   ## Schedule `action` to run after the current propagation cycle drains.
   ##
   ## Inside an `effect`/`computed` body, this is the principled way to invoke
@@ -78,11 +101,45 @@ proc runAfterPropagation*(action: DeferredAction)
   ## so the walker accepts the call. The closure body is not descended into
   ## (lambda bodies are deferred-execution context).
   {.cast(gcsafe).}:
+    let h = DeferredHandle(cancelledFlag: false)
+    if currentScope != nil and not currentScope.disposed:
+      # Scope-affine: scope dispose auto-cancels the pending action.
+      let cap = h
+      onCleanup proc() = cap.cancelledFlag = true
     if gPropagating:
-      gDeferred.add action
+      let cap = h
+      let act = action
+      gDeferred.add proc() =
+        if not cap.cancelledFlag:
+          act()
     else:
       try: action()
       except Exception: discard
+    return h
+
+proc runAfterPropagationDetached*(action: DeferredAction): DeferredHandle
+    {.discardable, gcsafe, raises: [],
+      forbids: [ReactiveRead, ReactiveWrite].} =
+  ## Like `runAfterPropagation`, but bypasses the scope-affine binding.
+  ## Scope dispose will NOT cancel the returned handle — only an explicit
+  ## `cancel(h)` will. Use for substrate-internal work whose lifecycle
+  ## is intentionally decoupled from any reactive scope (module-level
+  ## metric flushes, the substrate's own disposers).
+  ##
+  ## Walker treatment matches `runAfterPropagation` (the body is a
+  ## lambda; the walker skips lambda bodies).
+  {.cast(gcsafe).}:
+    let h = DeferredHandle(cancelledFlag: false)
+    if gPropagating:
+      let cap = h
+      let act = action
+      gDeferred.add proc() =
+        if not cap.cancelledFlag:
+          act()
+    else:
+      try: action()
+      except Exception: discard
+    return h
 
 # --- Drain + notify ---------------------------------------------------------
 

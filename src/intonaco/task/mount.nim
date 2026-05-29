@@ -49,22 +49,27 @@ template mountWhen*(boolSig: Signal[bool], body: untyped): untyped =
   ## it inside the deferred closure so `spawn`s inside `body` parent to the
   ## right place and journal events attribute to the right task.
   let mountWhenCtx = currentContext()
+  let mountWhenScope = currentScope
   var currentMount: Mount = nil
-  var disposed = false
   effect [boolSig]:
     let should = boolSig         # decide: pure bool snapshot
-    runAfterPropagation(proc() {.closure.} =
-      if disposed: return
-      withContext(mountWhenCtx):
-        if should:
-          if currentMount == nil or currentMount.future.finished:
-            currentMount = body
-        else:
-          if currentMount != nil and not currentMount.future.finished:
-            currentMount.cancel()
-            currentMount = nil)
+    # Bind the deferred action's lifetime to the registering scope:
+    # M-γ.2's scope-affine `runAfterPropagation` auto-cancels the
+    # pending action on scope dispose. The `withScope` wrapper makes
+    # the registering scope current at call time so the binding
+    # latches to the right owner (effect bodies fire under the
+    # writer's scope, not the effect's).
+    withScope(mountWhenScope):
+      runAfterPropagation(proc() {.closure.} =
+        withContext(mountWhenCtx):
+          if should:
+            if currentMount == nil or currentMount.future.finished:
+              currentMount = body
+          else:
+            if currentMount != nil and not currentMount.future.finished:
+              currentMount.cancel()
+              currentMount = nil)
   onCleanup proc() =
-    disposed = true
     if currentMount != nil and not currentMount.future.finished:
       currentMount.cancel()
       currentMount = nil
