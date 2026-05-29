@@ -28,6 +28,13 @@
 
 import std/[macros, options]
 import ../primitives/subscribable
+import ../primitives/signal       # `peek` for Signal[T] — needed so the quote-do
+                                  # in `buildShadowLets` resolves `peek` against
+                                  # this module's scope (where it's unambiguous),
+                                  # not the consumer call-site (where chronos's
+                                  # `peek(Channel)` may also be visible and
+                                  # shadow under generic instantiation).
+import ../primitives/collection   # `peek` for CollectionSignal[T] — same reason
 import ../primitives/height
 import ../analysis/ast
 import ../analysis/pass
