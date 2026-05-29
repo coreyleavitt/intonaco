@@ -45,8 +45,9 @@ suite "intonaco/substrate — substrate-author surface":
     s.set(7)
     check observed == 21
 
-  test "substrate surface exposes the AST utilities + the walker (compile-time names)":
+  test "substrate surface exposes the AST utilities + the walker entry point":
     check declared(rewriteDepRefs)
-    check declared(noUndeclaredSignals)
+    check declared(runAnalysis)
+    check declared(registerWalkPass)
     check declared(depSymUnwrap)
     check declared(containsDepSym)

@@ -29,7 +29,8 @@ import std/[macros, options]
 import ../primitives/deltafloor   # deltas / foldDeltas — named by bindSym
 import ../primitives/height
 import ../primitives/subscribable # `Subscribable` — bindSym'd into the homogenization wrapping
-import ../analysis/walker      # noUndeclaredSignals
+import ../analysis/pass            # runAnalysis
+import ../analysis/passes_core     # registers the three core walker passes
 
 proc unwrapConv(n: NimNode): NimNode {.compileTime.} =
   ## Walk through implicit-conversion wrappers down to the sym.
@@ -90,7 +91,7 @@ macro scan*(name: untyped, coll: untyped, deps: untyped,
   step.body = newStmtList()
   for s in shadows: step.body.add s
   step.body.add quote do:
-    noUndeclaredSignals(`origBody`)
+    runAnalysis(`origBody`, `deps`)
   # Homogenize deps bracket for the inner typed-arg sem-check. `bindSym` ties
   # the name to scan.nim's import — emitted code resolves regardless of what
   # the consumer module imported.

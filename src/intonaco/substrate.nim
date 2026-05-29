@@ -31,7 +31,8 @@ export subscribable, computation, runtime, deltafloor, restoration, convergence
 
 # Analysis layer — for substrate templates that emit `noUndeclaredSignals`
 # walks, manipulate dep ASTs, or emit Diagnostics.
-import ./reactive/analysis/walker
+import ./reactive/analysis/pass
+import ./reactive/analysis/passes_core
 import ./reactive/analysis/ast
 import ./reactive/analysis/diagnostic
-export walker, ast, diagnostic
+export pass, passes_core, ast, diagnostic

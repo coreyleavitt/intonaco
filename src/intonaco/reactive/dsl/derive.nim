@@ -22,7 +22,8 @@
 import std/[macros, options]
 import ../primitives/deltafloor   # mapped / filtered / folded — named by bindSym
 import ../primitives/height
-import ../analysis/walker      # noUndeclaredSignals (the walker)
+import ../analysis/pass            # runAnalysis
+import ../analysis/passes_core     # registers the three core walker passes
 
 proc sourceHeight(coll: NimNode): int {.compileTime.} =
   ## The compile-time height of a `derive` source. A `CollectionSignal[_]` is
@@ -54,7 +55,7 @@ proc transformBinding(name, coll, fn, floor: NimNode, op: string): NimNode
   ## runtime trace), resolve+compose the source height, bake it onto `name`,
   ## and emit `floor(coll, fn, fixedHeight = h)`.
   let body = fnBody(fn)
-  discard getAst(noUndeclaredSignals(body))    # walker fires at sem; errors localize
+  discard getAst(runAnalysis(body, []))    # walker fires at sem; errors localize
   let h = sourceHeight(coll) + 1
   let ctor = newCall(floor, coll, fn,
     nnkExprEqExpr.newTree(ident"fixedHeight", newLit(h)))

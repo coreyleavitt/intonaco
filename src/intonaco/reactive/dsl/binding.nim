@@ -39,7 +39,8 @@ import ../primitives/signal
 import ../primitives/subscribable
 import ../primitives/height
 import ../primitives/computation
-import ../analysis/walker
+import ../analysis/pass
+import ../analysis/passes_core   # registers the three core walker passes
 import ../analysis/ast
 
 export signal      # `Signal[T]`, `signal(...)`, `signals:`, `peek` — the
@@ -75,7 +76,7 @@ macro computedInner(name: untyped, deps: typed, body: untyped,
   # Wrap ONLY the user's body in `noUndeclaredSignals` — not the shadows
   # (their `let x = x.peek()` legitimately reads the outer Signal once).
   let bodyChecked = quote do:
-    noUndeclaredSignals(`bodyRewritten`)
+    runAnalysis(`bodyRewritten`, `deps`)
   var bodyOut = newStmtList()
   for s in shadows: bodyOut.add s
   bodyOut.add bodyChecked
@@ -126,7 +127,7 @@ macro effectInner(deps: typed, body: untyped, origDeps: untyped): untyped =
   # See `rewriteDepRefs` rationale in computedInner.
   let bodyRewritten = rewriteDepRefs(body, depSyms)
   let bodyChecked = quote do:
-    noUndeclaredSignals(`bodyRewritten`)
+    runAnalysis(`bodyRewritten`, `deps`)
   var bodyOut = newStmtList()
   for s in shadows: bodyOut.add s
   bodyOut.add bodyChecked
