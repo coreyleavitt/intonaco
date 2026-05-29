@@ -22,10 +22,6 @@
 ## disposes. Calling outside any scope is allowed but the binding
 ## then lives until process exit (no scope to hang the cleanup on).
 
-import std/[strutils, tables]
-import ./events
-import ./log
-include intonaco/reactive_internal
 
 type
   SignalApplier* = proc(repr: string) {.closure, gcsafe, raises: [].}

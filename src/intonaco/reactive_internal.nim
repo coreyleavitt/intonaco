@@ -98,3 +98,9 @@ include task/group
 include task/parallel
 include task/mount
 include task/supervisor
+
+# Layer 8: journal/timewarp — replay-time signal restoration.
+# Uses substrate-internal `setUntracked` to write signals without
+# producing journal entries. Substrate-author code; folded in for
+# the same type-identity reason as task/*.
+include intonaco/journal/timewarp
