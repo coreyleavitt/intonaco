@@ -6,7 +6,7 @@
 ## fresco's test_collection.nim (the delta-emission + speculative core).
 
 import std/unittest
-include intonaco/reactive_internal
+import intonaco/reactive
 
 suite "CollectionSignal: core delta emission":
 
@@ -19,7 +19,8 @@ suite "CollectionSignal: core delta emission":
     let c = collectionC[string]()
     var deltas: seq[Delta[string]] = @[]
     discard createRoot:
-      onDelta(c, proc(d: Delta[string]) = deltas.add d)
+      eachDelta c, d:
+        deltas.add d
     c.push("a"); c.push("b"); c.push("c")
     check c.get() == @["a", "b", "c"]
     check deltas.len == 3
@@ -31,7 +32,8 @@ suite "CollectionSignal: core delta emission":
     let c = collectionC(@[1, 2, 3])
     var deltas: seq[Delta[int]] = @[]
     discard createRoot:
-      onDelta(c, proc(d: Delta[int]) = deltas.add d)
+      eachDelta c, d:
+        deltas.add d
     discard c.pop();   check deltas[^1].kind == dkRemove and deltas[^1].removeIdx == 2
     c.insert(0, 0);    check deltas[^1].kind == dkInsert and deltas[^1].insertIdx == 0
     c.setAt(1, 99);    check deltas[^1].kind == dkUpdate and deltas[^1].updateVal == 99
@@ -39,11 +41,12 @@ suite "CollectionSignal: core delta emission":
     c.clear();         check deltas[^1].kind == dkClear
     c.set(@[7, 8]);    check deltas[^1].kind == dkReplace and deltas[^1].replaceVal == @[7, 8]
 
-  test "onDelta handlers unregister on scope dispose":
+  test "eachDelta handlers unregister on scope dispose":
     let c = collectionC[int]()
     var deltas: seq[Delta[int]] = @[]
     let root = createRoot:
-      onDelta(c, proc(d: Delta[int]) = deltas.add d)
+      eachDelta c, d:
+        deltas.add d
     c.push(1); check deltas.len == 1
     dispose(root)
     c.push(2); check deltas.len == 1
@@ -52,8 +55,10 @@ suite "CollectionSignal: core delta emission":
     let c = collectionC[int]()
     var a, b = 0
     discard createRoot:
-      onDelta(c, proc(d: Delta[int]) = (if d.kind == dkInsert: a += d.insertVal))
-      onDelta(c, proc(d: Delta[int]) = (if d.kind == dkInsert: b += d.insertVal))
+      eachDelta c, d:
+        if d.kind == dkInsert: a += d.insertVal
+      eachDelta c, d:
+        if d.kind == dkInsert: b += d.insertVal
     c.push(3); c.push(7)
     check a == 10 and b == 10
 
@@ -62,11 +67,14 @@ suite "CollectionSignal: core delta emission":
     var aFired, cFired = 0
     var bScope: Scope
     let root = createRoot:
-      onDelta(c, proc(d: Delta[int]) = (inc aFired; dispose(bScope)))
+      eachDelta c, d:
+        inc aFired; dispose(bScope)
       bScope = newScope(parent = currentScope)
       withScope(bScope):
-        onDelta(c, proc(d: Delta[int]) = discard d)
-      onDelta(c, proc(d: Delta[int]) = inc cFired)
+        eachDelta c, d:
+          discard d
+      eachDelta c, d:
+        inc cFired
     c.push(1)
     check aFired == 1
     check cFired == 1
@@ -76,7 +84,8 @@ suite "CollectionSignal: core delta emission":
     let c = collectionC(@[1, 2, 3])
     var runs = 0
     discard createRoot:
-      createEffect proc() = (discard c.get(); inc runs)
+      effect [c]:
+        discard c; inc runs
     let base = runs
     c.push(4);      check runs == base + 1
     c.setAt(1, 99); check runs == base + 2
@@ -103,7 +112,8 @@ suite "CollectionSignal: speculative rollback":
     let c = collectionC(@[10, 20, 30])
     var deltas: seq[Delta[int]] = @[]
     discard createRoot:
-      onDelta(c, proc(d: Delta[int]) = deltas.add d)
+      eachDelta c, d:
+        deltas.add d
     discard speculative:
       c.push(40); c.setAt(0, 99); discard c.pop()
     check deltas[^1].kind == dkRollback

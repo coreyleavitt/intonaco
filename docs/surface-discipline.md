@@ -123,6 +123,42 @@ You should NOT use:
 
 If you find yourself wanting something in the SHOULD NOT list, you've crossed into substrate-author territory. Switch to `import intonaco/substrate` and read `docs/extension-protocol.md`.
 
+## Test discipline (M-ε.2)
+
+Tests fall into two categories. The right `import`/`include` choice depends on which:
+
+### Consumer tests — `import intonaco/reactive`
+
+Tests that exercise behavior reachable through public macros. They use the same surface a fresco app sees:
+- `signals:`, `collections:`, `computed`, `effect`, `derive`, `keep`, `fold`, `scan`, `dynamic`, `eachItem`, `eachDelta`
+- `Scope`, `withScope`, `onCleanup`, `createRoot`
+- `tween`, `spring`, `speculative:`, `provide`/`use`
+- `Signal[T]`, `CollectionSignal[T]`, `Dynamic[T]`, `DynamicCollection[T]`, `Subscribable` (types only)
+
+These tests should NEVER reach for substrate-internal procs (`createEffect`, `onDelta`, `subscribe`, `notify`, `pushDelta`, `setUntracked`, `runAfterPropagation`, `mapped`/`filtered`/`folded`, etc.). If a behavior CAN be tested through the public surface, the test belongs in this category.
+
+### Substrate-internal tests — `include intonaco/reactive_internal`
+
+Tests that exercise substrate-floor behavior with no public macro equivalent:
+- **Walker-rejected patterns**: effect-writes-signal (`createEffect` body that calls `someSignal.set(...)`). The walker correctly rejects these through `effect [deps]: body` because the written signal isn't in the deps bracket. Testing the substrate's tolerance of this pattern requires the floor procs.
+- **Substrate-template kit**: `computedC`, `effectC`, `tracedC`-style primitives. The kit is the substrate-author API; testing it requires substrate-author access.
+- **Floor procs directly**: `mapped`, `filtered`, `folded`, `deltas`, `foldDeltas`, `runAfterPropagation`. These are runtime primitives the public macros wrap.
+- **Construction without public seed macros**: `newDynamicReactive`, `pushDelta`. Public `dynamicCollection name: body` macro is deferred (M-δ.2); until it lands, modality tests need substrate-internal access.
+
+These tests use `include intonaco/reactive_internal` rather than `import` because:
+1. They need access to non-`*`-exported symbols (the seal makes them invisible through `import`).
+2. They need the same type identities as the substrate-author code they test (Nim's `include` keeps types in the test's compilation unit; cross-import would fragment).
+
+### How to decide
+
+Ask: **could this test be written against the public macros without changing what's being tested?**
+- If yes: it's a consumer test. Use `import intonaco/reactive`.
+- If no — the public macros' walker discipline rejects the pattern, or no public macro exists yet: substrate-internal. Use `include intonaco/reactive_internal`.
+
+Don't use `include` as a default. Reach for it deliberately when the test genuinely exercises substrate-floor behavior.
+
 ## Decision log
 
 - **2026-05-29** — M-β closed. C-suffix naming chosen over import-level hiding after PhD-CS analysis: Nim's overload-resolution semantics don't play cleanly with selective re-export for operator overloads. Naming-level discipline is uniform with the existing `computedC` / `effectC` convention and is sufficient at current scale. `-d:intonacoStrictSurface` flag deferred (file as follow-up if requested).
+- **2026-05-29** — M-ε.1 sealed the substrate via `include`-based single-module structure. The C-suffix discipline gets compiler-enforcement for everything below the `*` line. signalC/collectionC remain `*`-exported (C-suffix flags substrate intent at the call site, per the M-β decision).
+- **2026-05-29** — M-ε.2 audit: 3 substrate-internal tests (`test_collection`, `test_diamond_glitch`, `test_binding`) migrated to `import intonaco/reactive` after the audit showed their intent is consumer-level. 10 tests remain substrate-internal-by-design (decide/act seam, walker-rejected effect patterns, substrate-template kit, runtime-floor primitives). Surfaced one substrate gap during migration: `peek*[T](c: ReactiveCollection[T])` added so a CollectionSignal can be used as a dep in `[deps]` brackets.

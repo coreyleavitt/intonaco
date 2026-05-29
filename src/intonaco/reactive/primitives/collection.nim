@@ -282,6 +282,13 @@ proc `()`*[T](c: ReactiveCollection[T]): seq[T] = c.get()
   ## Mirrors `Signal[T]`'s `()` operator for API symmetry. Requires
   ## `{.experimental: "callOperator".}` at the call site.
 
+proc peek*[T](c: ReactiveCollection[T]): seq[T] =
+  ## Non-tracked snapshot — read current items WITHOUT establishing a
+  ## dependency on the current Computation. Mirrors `Signal[T].peek()`.
+  ## Used by the kit's `buildShadowLets` so consumers can use a
+  ## CollectionSignal as a dep in `[deps]` brackets (`effect [coll]: ...`).
+  c.items
+
 proc len*[T](c: ReactiveCollection[T]): int =
   ## Length of the collection. Tracked: a `createEffect` / `tracked:`
   ## body that reads `.len` re-runs when the collection mutates.

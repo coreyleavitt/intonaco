@@ -22,17 +22,19 @@
 ## becomes the red→green target for the height-ordered worklist scheduler.
 
 import std/unittest
-include intonaco/reactive_internal
+import intonaco/reactive
 
 suite "consistency spike — diamond glitch-freedom":
 
   test "effect never observes a mixed-version (b != c) state":
-    let a = signalC(0)
-    let b = createComputed(proc(): int = a())
-    let c = createComputed(proc(): int = a())
+    signals:
+      a = 0
+    computed b, [a]: a
+    computed c, [a]: a
 
     var seen: seq[(int, int)] = @[]
-    createEffect(proc() = seen.add (b(), c()))
+    discard createRoot:
+      effect [b, c]: seen.add (b, c)
 
     a.set(1)
     a.set(2)
@@ -49,12 +51,14 @@ suite "consistency spike — diamond glitch-freedom":
     # Corollary: with a glitch, d fires twice per write (once mid-cascade,
     # once settled). Exactly-once is the stronger guarantee the scheduler
     # should restore. Documented here; also expected to fail today.
-    let a = signalC(0)
-    let b = createComputed(proc(): int = a())
-    let c = createComputed(proc(): int = a())
+    signals:
+      a = 0
+    computed b, [a]: a
+    computed c, [a]: a
 
     var fires = 0
-    createEffect(proc() = (discard (b(), c()); inc fires))
+    discard createRoot:
+      effect [b, c]: (discard b; discard c; inc fires)
 
     fires = 0          # ignore the initial run
     a.set(1)

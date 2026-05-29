@@ -5,7 +5,7 @@
 {.experimental: "callOperator".}
 
 import std/unittest
-include intonaco/reactive_internal
+import intonaco/reactive
 
 # ---- The four core behaviors, in the SUGARED form -----------------------
 
@@ -222,7 +222,8 @@ suite "C shape: COMPILE-TIME height resolution (the real goal)":
     ## `Signal[_]` OR `Dynamic[_]` sym in a static body. Reading a Dynamic
     ## value from a static `computed`/`effect` is a compile error — the
     ## type-level quarantine that keeps the static fragment sound.
-    let d: Dynamic[int] = dynamicComputed(proc(): int = 42)
+    dynamic d:
+      42
     let a = signalC(0)
     check not compiles(
       block:
