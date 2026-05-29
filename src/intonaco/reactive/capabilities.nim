@@ -27,7 +27,8 @@
 ## `requires` annotations. That would lift the check from runtime to
 ## compile time along statically-known supervisor paths.
 
-import std/[macros, strutils, tables, sets]
+import std/[macros, strutils, tables, sets, options]
+export options
 # `use` (from `primitives/context`) is emitted by the `requires` macro
 # below; the emission is name-based, so the symbol is resolved at the
 # consumer's call site (where they `import intonaco/reactive`), not at
