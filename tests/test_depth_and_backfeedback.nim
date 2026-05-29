@@ -17,7 +17,7 @@ suite "backward feedback under the uniform worklist":
     # and writes `a` — a backward edge: a's observer `deep` is at a LOWER
     # height than the writing effect. This is the one case the deferred-
     # write machinery was the last candidate justification for.
-    let a = signal(0)
+    let a = signalC(0)
     let deep = createComputed(proc(): int = a())
     var effectRuns = 0
     createEffect(proc() =
@@ -43,7 +43,7 @@ suite "depth>1 graphs (the shape the substrate is FOR)":
     #      e   f            h3   (both mirror d)
     #       \ /
     #        g (effect)     h4   (diamond-2 apex)
-    let a = signal(0)
+    let a = signalC(0)
     let b = createComputed(proc(): int = a())
     let c = createComputed(proc(): int = a())
     let d = createComputed(proc(): int = b() + c())
@@ -63,7 +63,7 @@ suite "depth>1 graphs (the shape the substrate is FOR)":
     check gFires == 2                   # exactly once per settled change, at h4
 
   test "wider diamond: one apex over many height-1 mirrors":
-    let a = signal(0)
+    let a = signalC(0)
     let m1 = createComputed(proc(): int = a())
     let m2 = createComputed(proc(): int = a())
     let m3 = createComputed(proc(): int = a())

@@ -36,7 +36,7 @@ suite "intonaco/reactive — consumer surface (via substrate re-export)":
 suite "intonaco/substrate — substrate-author surface":
 
   test "substrate surface exposes computedC + effectC primitives":
-    let s = signal(10)
+    let s = signalC(10)
     var observed: int
     discard createRoot:
       let sig = computedC([Subscribable(s)], proc(): int = s.get() * 3)

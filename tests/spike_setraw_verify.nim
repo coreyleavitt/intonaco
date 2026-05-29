@@ -2,7 +2,7 @@
 ## forbids levers catch real read/write through the public API.
 import std/[effecttraits, macros]
 import intonaco/reactive/primitives/signal
-let s = signal(0, label = "s")
+let s = signalC(0, label = "s")
 proc writesS() = s.set(5)
 proc readsS(): int = s()
 macro rep(): untyped =

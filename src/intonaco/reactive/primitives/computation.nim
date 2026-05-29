@@ -29,7 +29,7 @@ proc computedC*[T](deps: openArray[Subscribable],
   ## of the lower-level `createEffect` / `createComputed` in `runtime.nim`.
   {.cast(gcsafe).}:
     let h = if fixedHeight >= 0: fixedHeight else: maxDepHeight(deps)
-    let outSig = signal(body())
+    let outSig = signalC(body())
     outSig.height = h
     let comp = Computation(kind: ckComputed, height: h, heightFixed: true)
     comp.run = proc() =

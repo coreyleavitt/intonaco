@@ -112,8 +112,11 @@ type
       ## scopes. Mutated only by `captureInverse` and the registered
       ## commit/rollback hooks.
 
-proc collection*[T](initial: seq[T] = @[], label = ""): CollectionSignal[T] =
-  ## Constructor matching the `signal(initial)` naming for plain signals.
+proc collectionC*[T](initial: seq[T] = @[], label = ""): CollectionSignal[T] =
+  ## **Substrate-internal** runtime constructor. Consumers use the
+  ## `collections: name = value` DSL macro instead — `collections:` bakes
+  ## the `{.height: 0.}` pragma. Naming follows the C-shape primitive
+  ## convention (compare `signalC` / `computedC`).
   CollectionSignal[T](items: initial, label: label)
 
 macro collections*(body: untyped): untyped =
@@ -137,7 +140,7 @@ macro collections*(body: untyped): untyped =
       let labelLit = newLit($name)
       result.add nnkLetSection.newTree(nnkIdentDefs.newTree(
         withHeight(name, 0), newEmptyNode(),
-        newCall(bindSym"collection", value,
+        newCall(bindSym"collectionC", value,
                 nnkExprEqExpr.newTree(ident"label", labelLit))))
     else:
       error("collections: arm must be `name = value`; got " &

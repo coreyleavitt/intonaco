@@ -5,7 +5,7 @@
 ## `orReplayJournal` is a `RestartHandler` that walks
 ## `lastWritesByLabel(prevTid)` and stages each label→writeRepr pair
 ## in a thread-local table. On the subsequent re-spawn, the new task
-## body's `signal(initial, label = "name")` constructions check the
+## body's `signalC(initial, label = "name")` constructions check the
 ## staging table; if a matching label is present and the writeRepr
 ## parses as the signal's value type, the parsed value replaces the
 ## declared initial. Each entry is consumed (read-and-remove) on its

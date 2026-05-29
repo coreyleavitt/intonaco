@@ -8,7 +8,7 @@
 ##
 ## ## Shape
 ##
-##   let active = signal(false)
+##   let active = signalC(false)
 ##   mountWhen(active):
 ##     spawn worker()
 ##

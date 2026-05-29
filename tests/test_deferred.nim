@@ -23,7 +23,7 @@ suite "runAfterPropagation":
   test "inside an effect body: action runs after the worklist drains":
     var actionRan = false
     var actionRanBeforeEffectBody = false
-    let trigger = signal(0)
+    let trigger = signalC(0)
     discard createRoot:
       effect [trigger]:
         let _ = trigger    # decide (silence walker)
@@ -36,8 +36,8 @@ suite "runAfterPropagation":
 
   test "action that writes a signal re-enters propagation; observer sees new value":
     var lastObserved: int = -1
-    let counter = signal(0)
-    let echoSig = signal(0)
+    let counter = signalC(0)
+    let echoSig = signalC(0)
     discard createRoot:
       effect [counter]:
         let v = counter
@@ -52,7 +52,7 @@ suite "runAfterPropagation":
 
   test "actions enqueued within a deferred action run in the NEXT batch":
     var trace: seq[string] = @[]
-    let s = signal(0)
+    let s = signalC(0)
     discard createRoot:
       effect [s]:
         let _ = s

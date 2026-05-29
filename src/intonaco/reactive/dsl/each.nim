@@ -8,7 +8,7 @@
 ## construction; there is no "did I forget to unsubscribe?" surface.
 ##
 ## Usage:
-##   let todos = collection[Todo]()
+##   let todos = collectionC[Todo]()
 ##   eachItem(todos) do (todo: Todo):
 ##     computed display, [pageStyle]:
 ##       formatTodo(pageStyle, todo)

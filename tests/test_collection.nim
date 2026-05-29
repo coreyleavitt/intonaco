@@ -16,12 +16,12 @@ import intonaco/reactive/primitives/speculative
 suite "CollectionSignal: core delta emission":
 
   test "empty initial state":
-    let c = collection[int]()
+    let c = collectionC[int]()
     check c.len == 0
     check c.get() == newSeq[int]()
 
   test "push appends and emits dkInsert":
-    let c = collection[string]()
+    let c = collectionC[string]()
     var deltas: seq[Delta[string]] = @[]
     discard createRoot:
       onDelta(c, proc(d: Delta[string]) = deltas.add d)
@@ -33,7 +33,7 @@ suite "CollectionSignal: core delta emission":
       check d.insertIdx == i
 
   test "pop / insert / remove / setAt / clear / set emit the right deltas":
-    let c = collection(@[1, 2, 3])
+    let c = collectionC(@[1, 2, 3])
     var deltas: seq[Delta[int]] = @[]
     discard createRoot:
       onDelta(c, proc(d: Delta[int]) = deltas.add d)
@@ -45,7 +45,7 @@ suite "CollectionSignal: core delta emission":
     c.set(@[7, 8]);    check deltas[^1].kind == dkReplace and deltas[^1].replaceVal == @[7, 8]
 
   test "onDelta handlers unregister on scope dispose":
-    let c = collection[int]()
+    let c = collectionC[int]()
     var deltas: seq[Delta[int]] = @[]
     let root = createRoot:
       onDelta(c, proc(d: Delta[int]) = deltas.add d)
@@ -54,7 +54,7 @@ suite "CollectionSignal: core delta emission":
     c.push(2); check deltas.len == 1
 
   test "multiple handlers all receive deltas":
-    let c = collection[int]()
+    let c = collectionC[int]()
     var a, b = 0
     discard createRoot:
       onDelta(c, proc(d: Delta[int]) = (if d.kind == dkInsert: a += d.insertVal))
@@ -63,7 +63,7 @@ suite "CollectionSignal: core delta emission":
     check a == 10 and b == 10
 
   test "#68: a handler disposing a sibling scope mid-fanout doesn't break iteration":
-    let c = collection[int]()
+    let c = collectionC[int]()
     var aFired, cFired = 0
     var bScope: Scope
     let root = createRoot:
@@ -78,7 +78,7 @@ suite "CollectionSignal: core delta emission":
     dispose(root)
 
   test "plain reactive observers re-fire on every delta kind":
-    let c = collection(@[1, 2, 3])
+    let c = collectionC(@[1, 2, 3])
     var runs = 0
     discard createRoot:
       createEffect proc() = (discard c.get(); inc runs)
@@ -92,20 +92,20 @@ suite "CollectionSignal: core delta emission":
 suite "CollectionSignal: speculative rollback":
 
   test "mutations roll back when the block falls off without commit":
-    let c = collection(@[1, 2, 3])
+    let c = collectionC(@[1, 2, 3])
     discard speculative:
       c.push(4); c.push(5)
       check c.len == 5
     check c.get() == @[1, 2, 3]
 
   test "mutations stick on commit":
-    let c = collection(@[1, 2, 3])
+    let c = collectionC(@[1, 2, 3])
     discard speculative:
       c.push(4); c.setAt(0, 99); commit()
     check c.get() == @[99, 2, 3, 4]
 
   test "M mutations + rollback fire ONE batched dkRollback with the right inverses":
-    let c = collection(@[10, 20, 30])
+    let c = collectionC(@[10, 20, 30])
     var deltas: seq[Delta[int]] = @[]
     discard createRoot:
       onDelta(c, proc(d: Delta[int]) = deltas.add d)

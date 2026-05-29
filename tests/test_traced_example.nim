@@ -30,7 +30,7 @@ suite "kit-built substrate template — traced example":
   test "traced macro inherits walker discipline (undeclared read fails)":
     # Confirms the kit's orchestrator wires runAnalysis automatically; the
     # traced macro can't bypass the discipline that computed enforces.
-    let stray = signal(0)
+    let stray = signalC(0)
     check not compiles(block:
       signals:
         a = 0

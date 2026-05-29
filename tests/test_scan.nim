@@ -26,7 +26,7 @@ collections:
 
 suite "scan — fold a collection's deltas into derived state":
   test "1. folds a delta into state when the collection mutates":
-    let c = collection[int](@[])
+    let c = collectionC[int](@[])
     let total = foldDeltas(deltas(c), 0, proc(acc: int, d: Delta[int]): int =
       if d.kind == dkInsert: acc + d.insertVal else: acc)
     check total() == 0
@@ -34,7 +34,7 @@ suite "scan — fold a collection's deltas into derived state":
     check total() == 10
 
   test "2. accumulates across successive mutations (no re-folding)":
-    let c = collection[int](@[])
+    let c = collectionC[int](@[])
     let total = foldDeltas(deltas(c), 0, proc(acc: int, d: Delta[int]): int =
       if d.kind == dkInsert: acc + d.insertVal else: acc)
     c.push(10)
@@ -98,12 +98,12 @@ suite "scan macro — the baked height drives glitch-free scheduling":
 
 suite "scan macro — refuses what it can't schedule statically":
   test "7. a non-baked collection (plain ctor) is a compile error":
-    let plain = collection[int](@[])   # no {.height.} — not via collections:
+    let plain = collectionC[int](@[])   # no {.height.} — not via collections:
     check not compiles(scan(bad7, plain, [], 0,
       proc(acc: int, d: Delta[int]): int = acc))
   test "8. a runtime-keyed step is a compile error":
-    let sigs = @[signal(1), signal(2)]
-    let idx = signal(0)
+    let sigs = @[signalC(1), signalC(2)]
+    let idx = signalC(0)
     check not compiles(scan(bad8, clog, [], 0,
       proc(acc: int, d: Delta[int]): int = acc + sigs[idx()]()))
 

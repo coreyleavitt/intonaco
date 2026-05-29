@@ -30,7 +30,7 @@ suite "mountWhen lifecycle (post-(C) redesign)":
           await sleepAsync(1000.milliseconds)
         finally:
           lastActive = false
-      let show = signal(false)
+      let show = signalC(false)
       let root = createRoot:
         mountWhen(show):
           spawn child()
@@ -62,7 +62,7 @@ suite "mountWhen lifecycle (post-(C) redesign)":
         except CancelledError:
           cancelled = true
           raise
-      let show = signal(true)
+      let show = signalC(true)
       let root = createRoot:
         mountWhen(show):
           spawn child()

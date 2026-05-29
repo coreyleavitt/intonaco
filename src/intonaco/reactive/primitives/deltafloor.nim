@@ -177,7 +177,7 @@ proc folded*[T, M: CommutativeGroup](c: ReactiveCollection[T],
     let m = f(x)
     contributions.add m
     acc = merge(acc, m)
-  let outSig = signal(acc)
+  let outSig = signalC(acc)
   if fixedHeight >= 0: outSig.height = fixedHeight
   c.onDelta proc(delta: Delta[T]) =
     case delta.kind
@@ -245,7 +245,7 @@ proc foldDeltas*[T, S](s: DeltaStream[T], initial: S,
   ## classified `max(collection, step-reads) + 1`), so the node fires after a
   ## higher-height signal its step reads — subscribe-time accumulation would only
   ## see the collection dependency and under-shoot, re-introducing a glitch.
-  let outSig = signal(initial)
+  let outSig = signalC(initial)
   var state = initial
   let comp = Computation(kind: ckEffect)
   if fixedHeight >= 0:

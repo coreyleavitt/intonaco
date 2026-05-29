@@ -78,7 +78,7 @@ macro dynamic*(name: untyped, body: untyped): untyped =
   ## the type system.
   ##
   ## Example:
-  ##   let activeTab = signal(0)
+  ##   let activeTab = signalC(0)
   ##   dynamic visibleContent:
   ##     tabs[activeTab.get()].title.get()
   ##

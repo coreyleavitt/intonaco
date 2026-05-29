@@ -36,7 +36,7 @@ proc sourceHeight(coll: NimNode): int {.compileTime.} =
   let h = heightOf(coll)
   if h.isSome: return h.get
   error("derive: `" & coll.repr & "` is not a statically-resolvable collection " &
-        "source (a plain `collection()` or a named `derive` result)", coll)
+        "source (a plain `collectionC()` or a named `derive` result)", coll)
 
 proc fnBody(fn: NimNode): NimNode {.compileTime.} =
   ## Extract the body of a function argument for the walker. Inline lambdas

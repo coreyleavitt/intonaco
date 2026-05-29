@@ -29,7 +29,7 @@ suite "effect/computed: template-substituted bodies":
 
   test "effect body inside a template sees the shadowed bool, not the Signal":
     var seen: seq[bool] = @[]
-    let sig = signal(false)
+    let sig = signalC(false)
     let root = createRoot:
       observeBoolViaTemplate(sig, seen)
     sig.set(true)

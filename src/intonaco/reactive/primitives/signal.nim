@@ -6,7 +6,7 @@
 ## the same surface.
 ##
 ## API:
-##   let count = signal(0)
+##   let count = signalC(0)
 ##   count()         # read (tracked if inside an effect / computed)
 ##   count.set(5)    # write
 ##   createEffect(proc() = echo count())
@@ -44,7 +44,12 @@ converter toSubscribable*[T](s: Signal[T]): Subscribable = s.Subscribable
 
 # --- Signal -----------------------------------------------------------------
 
-proc signal*[T](initial: T, label = ""): Signal[T] =
+proc signalC*[T](initial: T, label = ""): Signal[T] =
+  ## **Substrate-internal** runtime constructor. Consumers use the
+  ## `signals: name = value` DSL macro instead — `signals:` bakes the
+  ## `{.height: 0.}` pragma that downstream `computed`/`effect` macros
+  ## compose. Naming follows the C-shape primitive convention (compare
+  ## `computedC` / `effectC`).
   ## Construct a Signal holding `initial`. The optional `label` is
   ## used by the journal for `ekSignalWrite` events — unlabeled
   ## signals are excluded from state-restoration projection.
@@ -163,7 +168,7 @@ macro signals*(body: untyped): untyped =
       # resolve a static height (#51/#53). Sources are height 0 by definition.
       result.add nnkLetSection.newTree(nnkIdentDefs.newTree(
         withHeight(name, 0), newEmptyNode(),
-        newCall(bindSym"signal", value,
+        newCall(bindSym"signalC", value,
                 nnkExprEqExpr.newTree(ident"label", labelLit))))
     else:
       error("signals: arm must be `name = value`; got " &

@@ -53,8 +53,6 @@ proc dep77Pass(node: NimNode, ctx: WalkContext): seq[Finding] {.nimcall.} =
 
 registerWalkPass(dep77Pass)
 
-import intonaco/reactive/analysis/passes_core   # registers the three core passes
-
 suite "M-α.2 — walker pass registry":
 
   test "a registered pass that errors causes the body's compilation to fail":
@@ -64,7 +62,7 @@ suite "M-α.2 — walker pass registry":
     check compiles(runAnalysis(41, []))
 
   test "NoUndeclaredSignalReadPass fires on a Signal[_]-typed sym in body":
-    let stray = signal(0)
+    let stray = signalC(0)
     # `stray` is Signal[int] — not in deps bracket — pass errors at compile time
     check not compiles(runAnalysis(stray, []))
     # An int literal is fine — Signal-read pass doesn't fire on non-reactive types

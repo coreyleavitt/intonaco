@@ -22,14 +22,14 @@ macro heightLit(sym: typed): int =
 
 suite "derive — incremental mapped view of a collection":
   test "1. value is the mapped source; updates on source change":
-    let c = collection(@[1, 2, 3])
+    let c = collectionC(@[1, 2, 3])
     let d = mapped(c, proc(x: int): int = x * 10)
     check d.get() == @[10, 20, 30]
     c.push(4)
     check d.get() == @[10, 20, 30, 40]
 
   test "2. incremental: f runs once per delta, not over the whole collection":
-    let c = collection(@[1, 2, 3])
+    let c = collectionC(@[1, 2, 3])
     var fcalls = 0
     let d = mapped(c, proc(x: int): int = (inc fcalls; x * 10))
     check fcalls == 3      # initial map over the 3 items
@@ -40,7 +40,7 @@ suite "derive — incremental mapped view of a collection":
     check d.get() == @[10, 20, 30, 40, 50]
 
   test "4. value equals the wholesale map after every delta kind":
-    let c = collection(@[1, 2, 3])
+    let c = collectionC(@[1, 2, 3])
     let f = proc(x: int): int = x * 10
     let d = mapped(c, f)
     template eqWholesale = check d.get() == c.get().map(f)
@@ -58,11 +58,11 @@ suite "derive — incremental mapped view of a collection":
       c.setAt(0, 99)
     eqWholesale                        # after rollback, d mirrors the restored c
 
-let plainColl = collection(@[1, 2, 3])   # plain ctor — NO `collections:`
+let plainColl = collectionC(@[1, 2, 3])   # plain ctor — NO `collections:`
 derive drows, plainColl, proc(x: int): int = x * 10
 
 suite "derive macro — compile-time scheduled, no collections: needed":
-  test "5. bakes height = collection+1 for a plain collection() source":
+  test "5. bakes height = collection+1 for a plain collectionC() source":
     check heightLit(drows) == 1          # CollectionSignal recognized as height 0
     check drows.get() == @[10, 20, 30]
     plainColl.push(4)
@@ -72,9 +72,9 @@ suite "derive macro — compile-time scheduled, no collections: needed":
 # dd and g's signal (h2). e must never observe dd updated while g's value is
 # stale — i.e. derive must fire through the worklist at its height, not eagerly
 # inside dc's fanout.
-let dc = collection(@[1])
+let dc = collectionC(@[1])
 derive dd, dc, proc(x: int): int = x
-let gsig = signal(0)
+let gsig = signalC(0)
 createEffect(proc() = gsig.set(dc.len))     # sibling observer of dc
 var glitches = 0
 createEffect(proc() = (if dd.get().len != gsig(): inc glitches))
@@ -85,7 +85,7 @@ suite "derive macro — glitch-free in a diamond":
     dc.push(2)
     check glitches == 0
 
-let pc = collection(@[1, 2, 3])
+let pc = collectionC(@[1, 2, 3])
 signals:
   theme = 10
 
@@ -102,13 +102,13 @@ suite "derive macro — the map must be pure (a linear operator)":
     # the pure form compiles
     check compiles(derive(okp, pc, proc(x: int): int = x * 2))
 
-let cc = collection(@[1, 2, 3])
+let cc = collectionC(@[1, 2, 3])
 derive once, cc, proc(x: int): int = x + 1       # [2, 3, 4]
 derive twice, once, proc(x: int): int = x * 10   # [20, 30, 40]
 
 suite "derive — emits mapped deltas, and composes":
   test "8. forwards a mapped delta to a consumer":
-    let c = collection(@[1, 2, 3])
+    let c = collectionC(@[1, 2, 3])
     let d = mapped(c, proc(x: int): int = x * 10)
     var got: seq[Delta[int]]
     onDelta(d, proc(delta: Delta[int]) = got.add delta)
@@ -124,7 +124,7 @@ suite "derive — emits mapped deltas, and composes":
     cc.push(4)
     check twice.get() == @[20, 30, 40, 50]   # ((4+1) * 10)
 
-let nums = collection(@[1, 2, 3, 4])
+let nums = collectionC(@[1, 2, 3, 4])
 keep evens, nums, proc(x: int): bool = x mod 2 == 0   # [2, 4]
 
 suite "filter — linear incremental filtered view":
@@ -136,7 +136,7 @@ suite "filter — linear incremental filtered view":
     check evens.get() == @[2, 4, 6]
 
   test "11. index translation: mutations crossing the predicate stay equal":
-    let c = collection(@[1, 2, 3, 4, 5, 6])
+    let c = collectionC(@[1, 2, 3, 4, 5, 6])
     keep ev, c, proc(x: int): bool = x mod 2 == 0   # [2, 4, 6]
     template eq = check ev.get() == c.get().filterIt(it mod 2 == 0)
     eq
@@ -152,7 +152,7 @@ suite "filter — linear incremental filtered view":
     check not compiles(keep(odd, nums, proc(x: int): bool = (x + theme()) mod 2 == 0))
 
   test "13. keep composes with derive (filter then map, height stacks)":
-    let c = collection(@[1, 2, 3, 4])
+    let c = collectionC(@[1, 2, 3, 4])
     keep evn, c, proc(x: int): bool = x mod 2 == 0   # [2, 4]
     derive lbl, evn, proc(x: int): string = "#" & $x  # ["#2", "#4"]
     check lbl.get() == @["#2", "#4"]
@@ -166,7 +166,7 @@ proc merge(a, b: int): int = a + b
 proc unit(t: typedesc[int]): int = 0
 proc invert(a: int): int = -a
 
-let fc = collection(@[1, 2, 3])
+let fc = collectionC(@[1, 2, 3])
 fold total, fc, proc(x: int): int = x   # sum, maintained incrementally
 
 suite "fold — linear incremental aggregate over a commutative group":

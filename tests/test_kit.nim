@@ -57,7 +57,7 @@ suite "M-α.3 — substrate-template authoring kit":
   test "kit's walker integration rejects undeclared signal reads":
     # An undeclared Signal[_] sym in body must be a compile error — the kit
     # invokes runAnalysis transparently, so the three core passes fire.
-    let stray = signal(0)
+    let stray = signalC(0)
     check not compiles(block:
       signals:
         z = 1

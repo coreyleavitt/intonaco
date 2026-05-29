@@ -28,7 +28,7 @@ import intonaco/reactive/primitives/runtime
 suite "consistency spike — diamond glitch-freedom":
 
   test "effect never observes a mixed-version (b != c) state":
-    let a = signal(0)
+    let a = signalC(0)
     let b = createComputed(proc(): int = a())
     let c = createComputed(proc(): int = a())
 
@@ -50,7 +50,7 @@ suite "consistency spike — diamond glitch-freedom":
     # Corollary: with a glitch, d fires twice per write (once mid-cascade,
     # once settled). Exactly-once is the stronger guarantee the scheduler
     # should restore. Documented here; also expected to fail today.
-    let a = signal(0)
+    let a = signalC(0)
     let b = createComputed(proc(): int = a())
     let c = createComputed(proc(): int = a())
 

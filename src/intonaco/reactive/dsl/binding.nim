@@ -41,7 +41,7 @@ import ../primitives/height
 import ../primitives/computation
 import ./kit                         # the substrate-template authoring kit
 
-export signal      # `Signal[T]`, `signal(...)`, `signals:`, `peek` — the
+export signal      # `Signal[T]`, `signalC(...)`, `signals:`, `peek` — the
                    # user-facing static-tier surface composes on top of these
 export height      # `heightOf` / `composeHeight` / `withHeight` — needed by
                    # the macros' generated code AND by `bakedHeight`'s callers

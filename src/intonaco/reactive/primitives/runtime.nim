@@ -60,7 +60,7 @@ proc createComputed*[T](body: proc(): T {.closure.}, fixedHeight = -1): Signal[T
   ## `fixedHeight >= 0` bakes the producing computation's height (#53); the
   ## output signal then carries that baked height for downstream readers.
   {.cast(gcsafe).}:
-    let outSig = signal(default(T))   # placeholder; the effect sets it immediately
+    let outSig = signalC(default(T))   # placeholder; the effect sets it immediately
     let comp = createEffect((proc() = outSig.set(body())), kind = ckComputed,
                             fixedHeight = fixedHeight)
     # The output signal carries the producing computation's height, so
