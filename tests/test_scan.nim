@@ -8,13 +8,7 @@
 ## the fold is O(1) per delta (no whole-seq re-read).
 
 import std/[unittest, macros, options]
-import intonaco/reactive/primitives/collection
-import intonaco/reactive/primitives/deltafloor    # deltas / foldDeltas (floor — tests use it directly)
-import intonaco/reactive/primitives/signal
-import intonaco/reactive/dsl/dynamic       # dynamicEffect (for the floor-glue tests)
-import intonaco/reactive/primitives/height
-import intonaco/reactive/dsl/binding       # `computed` / `signals:` / `collections:` re-exports
-import intonaco/reactive/dsl/scan
+include intonaco/reactive_internal
 
 macro heightLit(sym: typed): int =
   ## The baked static height, or -1 if the binding carries no `{.height.}`.

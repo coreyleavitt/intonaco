@@ -13,7 +13,6 @@
 import std/[tables, times, sequtils]
 import chronos
 import ./events
-import intonaco/reactive/primitives/scope
 
 type
   Snapshot* = object
@@ -75,70 +74,6 @@ var globalJournal* {.threadvar.}: Journal
 
 proc newJournal*(): Journal = Journal(events: @[])
 
-template journalEvent*(body: untyped) =
-  ## Write a journal event under the active scope's identity, then
-  ## advance `currentScope.lastEventId` to the new event id. Silent
-  ## no-op when no journal is installed. Failures during append are
-  ## swallowed — the journal is an audit trail, not a critical path.
-  ##
-  ## Inside `body`, three names are `{.inject.}`'d into scope:
-  ##   `jrnl`      — the active journal (non-nil)
-  ##   `taskTid`   — current scope's TaskId, or RootTask if no scope
-  ##   `parentEvt` — current scope's lastEventId, or NoEvent if no scope
-  ##
-  ## (An internal `id` let-binding holds the returned EventId for the
-  ## post-body lastEventId advancement. It's scoped to the template
-  ## body and not visible to callers.)
-  ##
-  ## All three names are chosen to be collision-resistant: `jrnl` and
-  ## `taskTid` rather than the obvious `j` and `tid` because the latter
-  ## are common throwaway / loop-variable names. `parentEvt` rather
-  ## than `p` for the same reason.
-  ##
-  ## `body` must evaluate to an `EventId` (typically a `jrnl.logXxx`
-  ## call). Usage:
-  ##
-  ##   journalEvent:
-  ##     jrnl.logTaskSpawned(taskTid, parentEvt, name, "")
-  ##
-  ## Replaces the 5-line `if globalJournal != nil: ...` boilerplate
-  ## previously hand-rolled at every journal call site.
-  if globalJournal != nil:
-    let jrnl {.inject.} = globalJournal
-    let taskTid {.inject.} = if currentScope != nil: currentScope.taskId else: RootTask
-    let parentEvt {.inject.} = if currentScope != nil: currentScope.lastEventId else: NoEvent
-    try:
-      # Internal binding for the returned EventId. Prefixed to avoid
-      # shadowing a caller's local `id` variable.
-      let frescoEvtId = body
-      if currentScope != nil: currentScope.lastEventId = frescoEvtId
-    except CatchableError: discard
-
-template journalEventOnScope*(scope: Scope, body: untyped) =
-  ## Like `journalEvent` but attributes the event to a specific scope
-  ## rather than `currentScope`. Used in callback sites where the
-  ## dispatcher's `currentScope` is unrelated to the event's logical
-  ## owner — e.g. `wireLifecycle`'s future-completion callback (uses
-  ## the captured task's scope), the `spawn` template's pre-await
-  ## logTaskSpawned, and `parallel:`'s concurrent-sibling cascade.
-  ##
-  ## Inside `body`, the same three names are injected as `journalEvent`:
-  ##   `jrnl`      — the active journal (non-nil)
-  ##   `taskTid`   — `scope.taskId` (or RootTask if scope is nil)
-  ##   `parentEvt` — `scope.lastEventId` (or NoEvent if scope is nil)
-  ##
-  ## Advances `scope.lastEventId` to the new event id, NOT
-  ## `currentScope.lastEventId`. Silent no-op without a journal;
-  ## CatchableError from the log call is swallowed.
-  if globalJournal != nil:
-    let jrnl {.inject.} = globalJournal
-    let taskTid {.inject.} = if scope != nil: scope.taskId else: RootTask
-    let parentEvt {.inject.} = if scope != nil: scope.lastEventId else: NoEvent
-    try:
-      let frescoEvtId = body
-      if scope != nil: scope.lastEventId = frescoEvtId
-    except CatchableError: discard
-
 proc useJournal*(j: Journal = nil): Journal =
   ## Install or reuse the process-wide journal. Semantics:
   ##
@@ -151,6 +86,11 @@ proc useJournal*(j: Journal = nil): Journal =
   ## first (or assign `globalJournal = newJournal()` directly) — the
   ## no-arg form intentionally reuses an existing journal so library
   ## code can call it lazily without clobbering a host-installed one.
+  ##
+  ## The two scope-coupled write templates — `journalEvent` and
+  ## `journalEventOnScope` — moved into `reactive/primitives/journal_glue`
+  ## at the M-ε.1 substrate seal (they depend on `Scope`, which is
+  ## inside the reactive include-set; this module stays scope-agnostic).
   if j != nil:
     globalJournal = j
   elif globalJournal == nil:

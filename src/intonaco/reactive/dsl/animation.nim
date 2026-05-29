@@ -21,10 +21,6 @@
 ## animation settles when ALL components are within (epsilonVel,
 ## epsilonPos).
 
-import std/math
-import chronos
-import ../primitives/signal
-import ../primitives/scope
 
 type
   Easing* = enum

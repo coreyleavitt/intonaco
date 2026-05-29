@@ -22,14 +22,7 @@
 ## greppable (the user wrote `dynamic name: ...`), and cannot masquerade as
 ## statically scheduled.
 
-{.experimental: "callOperator".}
 
-import std/macros
-import ../primitives/subscribable   # Subscribable / trackRead / notify / ReactiveRead
-import ../primitives/scheduler
-import ../primitives/runtime        # createEffect (the internal floor)
-import ../primitives/dynamic        # Dynamic[T] type — moved here for M-δ
-export dynamic                       # consumers see Dynamic[T] via dsl/dynamic
 
 proc get*[T](d: Dynamic[T]): T {.gcsafe, tags: [ReactiveRead].} =
   ## Read the current value, registering a dependency on the current
@@ -41,7 +34,7 @@ proc get*[T](d: Dynamic[T]): T {.gcsafe, tags: [ReactiveRead].} =
 
 proc `()`*[T](d: Dynamic[T]): T {.gcsafe.} = d.get()
 
-proc dynamicComputed*[T](body: proc(): T {.closure.}): Dynamic[T] =
+proc dynamicComputed[T](body: proc(): T {.closure.}): Dynamic[T] =
   ## Value-construct a derived reactive value on the runtime floor. `body`
   ## re-runs whenever a signal it reads changes; the result is stored in the
   ## returned `Dynamic[T]` and its observers re-fire.
@@ -59,7 +52,7 @@ proc dynamicComputed*[T](body: proc(): T {.closure.}): Dynamic[T] =
   outDyn.height = comp.height
   outDyn
 
-proc dynamicEffect*(body: proc() {.closure.}): Computation {.discardable.} =
+proc dynamicEffect(body: proc() {.closure.}): Computation {.discardable.} =
   ## Value-construct a leaf side-effect on the runtime floor — the `proc()`
   ## form of the `effect:` macro. Runs `body` immediately, re-runs on any read
   ## signal's change, and is torn down with the current scope. Returns the

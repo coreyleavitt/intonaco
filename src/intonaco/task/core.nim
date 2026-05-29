@@ -14,13 +14,7 @@
 ## scope makes the child's scope a child of the parent's; disposing
 ## the parent disposes its children, which cancels their Futures.
 
-import chronos
-import intonaco/reactive/primitives/scope
-import intonaco/journal/events
-import intonaco/journal/log
-import ./types
 
-export types  # Mount, MountCollector, parallelCollector — public surface
 
 proc cancel*(m: Mount) {.gcsafe, raises: [].} =
   ## Cancel the task. Idempotent. Triggers scope dispose via the

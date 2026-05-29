@@ -13,11 +13,7 @@
 ## cascades synchronously to its siblings before the exception bubbles
 ## out of the block.
 
-import chronos
-import ./core
 
-import intonaco/journal/events   # for `$` on TaskId
-import intonaco/journal/log
 
 proc awaitParallel(mounts: seq[Mount]) {.async: (raises: [CatchableError]).} =
   ## Wait for every Mount. On first failure: cancel siblings, drain

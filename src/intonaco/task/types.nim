@@ -5,9 +5,6 @@
 ## task lifecycle machinery (spawn, wireLifecycle, journal-write
 ## boilerplate).
 
-import chronos
-import chronos/contextvars
-import intonaco/reactive/primitives/scope
 
 type
   Mount* = ref object

@@ -26,8 +26,6 @@
 ## inside an `effect`/`computed` body. The closure body it receives is a lambda,
 ## which the walker skips (lambda bodies = deferred-execution context).
 
-import ./subscribable
-import ./scope
 
 # --- Reactive worklist ------------------------------------------------------
 
@@ -81,7 +79,7 @@ var gDeferred {.threadvar.}: seq[DeferredAction]
   ## `effect`/`computed` body where the walker would (rightly) reject it.
   ## Implements direction (C) of the M10 substrate-design discussion.
 
-proc runAfterPropagation*(action: DeferredAction): DeferredHandle
+proc runAfterPropagation(action: DeferredAction): DeferredHandle
     {.discardable, gcsafe, raises: [],
       forbids: [ReactiveRead, ReactiveWrite].} =
   ## Schedule `action` to run after the current propagation cycle drains.
@@ -117,7 +115,7 @@ proc runAfterPropagation*(action: DeferredAction): DeferredHandle
       except Exception: discard
     return h
 
-proc runAfterPropagationDetached*(action: DeferredAction): DeferredHandle
+proc runAfterPropagationDetached(action: DeferredAction): DeferredHandle
     {.discardable, gcsafe, raises: [],
       forbids: [ReactiveRead, ReactiveWrite].} =
   ## Like `runAfterPropagation`, but bypasses the scope-affine binding.
@@ -192,7 +190,7 @@ proc drainQueue() {.gcsafe, raises: [].} =
               action()
           except Exception: discard
 
-proc notify*(s: Subscribable) {.gcsafe, raises: [].} =
+proc notify(s: Subscribable) {.gcsafe, raises: [].} =
   ## Enqueue every Computation observing `s` into the height-ordered worklist;
   ## if no propagation is in flight, drain it.
   {.cast(gcsafe).}:

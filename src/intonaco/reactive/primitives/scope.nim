@@ -10,8 +10,6 @@
 ## install a scope as current for a block; use `createRoot` for the
 ## common case of opening a fresh root.
 
-import chronos/contextvars
-import intonaco/journal/events
 
 type
   ProviderEntry* = object

@@ -18,16 +18,7 @@
 ## scope dispose, the Computation is marked disposed and removed
 ## from each of its sources' observer lists.
 
-{.experimental: "callOperator".}
 
-import std/macros
-import ./subscribable
-import ./scheduler
-import ./height
-import ./speculative
-import ./restoration
-import intonaco/journal/events
-import intonaco/journal/log
 
 type
   Signal*[T] = ref object of Subscribable
@@ -132,7 +123,7 @@ proc set*[T](s: Signal[T], newVal: T) {.gcsafe, raises: [].} =
   ## journal entry under the current scope (if any).
   s.setCore(newVal, journal = true)
 
-proc setUntracked*[T](s: Signal[T], newVal: T) {.gcsafe, raises: [].} =
+proc setUntracked[T](s: Signal[T], newVal: T) {.gcsafe, raises: [].} =
   ## Like `set` but **does not write a journal entry**. Used by the
   ## animation frame clock for intermediate interpolation values:
   ## those writes have no meaningful task attribution (the clock has

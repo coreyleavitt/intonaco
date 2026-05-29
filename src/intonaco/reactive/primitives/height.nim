@@ -21,7 +21,6 @@
 ## - `withHeight(name, h)` — bake a height onto a binding name (the inverse of
 ##   `heightOf`).
 
-import std/[macros, options]
 
 template height*(n: int) {.pragma.}
   ## The carrier: `{.height: N.}` on a reactive binding. Read back via

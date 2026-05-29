@@ -29,7 +29,6 @@
 ## InputStream's stop() shape so the two play symmetrically in
 ## receive blocks.
 
-import chronos
 
 type
   Mailbox*[T] = ref object

@@ -6,9 +6,7 @@
 
 {.experimental: "callOperator".}
 
-import intonaco/reactive/primitives/signal
-import intonaco/reactive/primitives/collection
-import intonaco/reactive/dsl/binding
+import intonaco/reactive
 
 let trigger = signalC(0)
 let dyn = newDynamicReactive[int](@[1, 2, 3])

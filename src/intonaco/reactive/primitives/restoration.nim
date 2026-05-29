@@ -17,10 +17,6 @@
 ## `onRestart` if needed). Parse failures log to stderr and use the
 ## initial — corrupt journal entries don't crash the new task.
 
-import std/[strutils, tables]
-import intonaco/journal/events
-import intonaco/journal/log
-import ./scope
 
 var pendingRestoration* {.threadvar.}: Table[string, string]
   ## Staging slot written by `orReplayJournal` immediately before the

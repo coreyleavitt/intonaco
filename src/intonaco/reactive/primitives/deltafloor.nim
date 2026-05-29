@@ -18,16 +18,8 @@
 ## name it; the explicit `import intonaco/reactive/primitives/deltafloor` is the greppable
 ## "I'm bypassing the classifier" act, mirroring `reactive/runtime` for signals.
 
-import std/sequtils
-import ./subscribable
-import ./scheduler
-import ./scope
-import ./collection
-import ./signal
-import ./dynamic
-import ./convergence
 
-proc onDelta*[T](c: ReactiveCollection[T], handler: DeltaHandler[T]) =
+proc onDelta[T](c: ReactiveCollection[T], handler: DeltaHandler[T]) =
   ## Register `handler` to receive every delta — height-scheduled. The handler
   ## fires through the worklist at the consumer's height (`c.height + 1`), after
   ## every lower-height dependency of the same propagation has settled, NOT
@@ -91,7 +83,7 @@ template mappedWiring[T, U](c: ReactiveCollection[T],
     else:
       pushDelta(d, mapDelta(delta, f))   # mapped delta: apply + emit to d's consumers
 
-proc mapped*[T, U](c: ReactiveCollection[T], f: proc(x: T): U {.closure.},
+proc mapped[T, U](c: ReactiveCollection[T], f: proc(x: T): U {.closure.},
                    fixedHeight = -1): ReactiveCollection[U] =
   ## The static (□-modality) floor under the `derive` macro. `value ===
   ## c.map(f)`, maintained incrementally. `fixedHeight >= 0` bakes the
@@ -102,7 +94,7 @@ proc mapped*[T, U](c: ReactiveCollection[T], f: proc(x: T): U {.closure.},
   mappedWiring(c, f, d)
   d
 
-proc mappedDynamic*[T, U](c: ReactiveCollection[T],
+proc mappedDynamic[T, U](c: ReactiveCollection[T],
                           f: proc(x: T): U {.closure.}):
     DynamicCollection[U] =
   ## The dynamic (◇-modality) floor under the `derive` macro: same delta
@@ -177,7 +169,7 @@ proc filteredWiring[T](c: ReactiveCollection[T],
       pushDelta(d, Delta[T](kind: dkReplace, replaceVal: fv))
     of dkRollback: recompute()   # recompute from the reverted source (the oracle)
 
-proc filtered*[T](c: ReactiveCollection[T], p: proc(x: T): bool {.closure.},
+proc filtered[T](c: ReactiveCollection[T], p: proc(x: T): bool {.closure.},
                   fixedHeight = -1): ReactiveCollection[T] =
   ## The static (□-modality) floor under the `keep` macro. `value ===
   ## c.filter(p)`, maintained incrementally via a kept-mask + rank.
@@ -188,7 +180,7 @@ proc filtered*[T](c: ReactiveCollection[T], p: proc(x: T): bool {.closure.},
   filteredWiring(c, p, d, keptRef)
   d
 
-proc filteredDynamic*[T](c: ReactiveCollection[T],
+proc filteredDynamic[T](c: ReactiveCollection[T],
                          p: proc(x: T): bool {.closure.}):
     DynamicCollection[T] =
   ## The dynamic (◇-modality) floor under the `keep` macro. Same
@@ -199,7 +191,7 @@ proc filteredDynamic*[T](c: ReactiveCollection[T],
   filteredWiring(c, p, ReactiveCollection[T](d), keptRef)
   d
 
-proc folded*[T, M: CommutativeGroup](c: ReactiveCollection[T],
+proc folded[T, M: CommutativeGroup](c: ReactiveCollection[T],
     f: proc(x: T): M {.closure.}, fixedHeight = -1): Signal[M] =
   ## The runtime floor under the `fold` macro — collection→scalar. Maintains
   ## `acc = ⊕ f(x)` over a commutative GROUP: the inverse makes remove/update
@@ -250,7 +242,7 @@ proc folded*[T, M: CommutativeGroup](c: ReactiveCollection[T],
     outSig.set(acc)
   outSig
 
-proc foldedDynamic*[T, M: CommutativeGroup](c: ReactiveCollection[T],
+proc foldedDynamic[T, M: CommutativeGroup](c: ReactiveCollection[T],
     f: proc(x: T): M {.closure.}): Dynamic[M] =
   ## The dynamic (◇-modality) floor under the `fold` macro: same
   ## incremental commutative-group aggregation as `folded`, but the
@@ -309,7 +301,7 @@ type
     ## normal `c.height + 1`.
     pending: seq[Delta[T]]
 
-proc deltas*[T](c: CollectionSignal[T]): DeltaStream[T] =
+proc deltas[T](c: CollectionSignal[T]): DeltaStream[T] =
   ## Obtain `c`'s delta stream. Each mutation pushes its typed delta onto the
   ## stream and schedules the stream's observers through the height-ordered
   ## scheduler.
@@ -320,7 +312,7 @@ proc deltas*[T](c: CollectionSignal[T]): DeltaStream[T] =
     notify(Subscribable(s))
   s
 
-proc foldDeltas*[T, S](s: DeltaStream[T], initial: S,
+proc foldDeltas[T, S](s: DeltaStream[T], initial: S,
                  step: proc(acc: S, d: Delta[T]): S {.closure.},
                  fixedHeight = -1): Signal[S] =
   ## The runtime floor under the `scan` macro — value-constructed, unclassified

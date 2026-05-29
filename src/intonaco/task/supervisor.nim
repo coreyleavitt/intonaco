@@ -15,20 +15,8 @@
 ## proc invocation. The supervisor calls the factory each time it
 ## (re)starts the child.
 
-import std/[macros, tables, sets, options]
-import chronos
-import chronos/contextvars
-import ./core
-import ./group
 
-import intonaco/reactive/primitives/scope
-import intonaco/reactive/capabilities
-import intonaco/journal/events as jev
-import intonaco/journal/log
 
-export group
-export capabilities
-export options
 
 type
   Lifecycle* = enum
@@ -437,7 +425,7 @@ type
     name*: string
     lifecycle*: Lifecycle
     running*: bool
-    taskId*: jev.TaskId
+    taskId*: TaskId
     restartCount*: int
     kind*: NodeKind
     poolName*: string   ## set when `kind == nkPoolMember`

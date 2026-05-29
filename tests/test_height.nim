@@ -3,7 +3,7 @@
 ## runtime value the unittest checks (the test_purity pattern).
 
 import std/[unittest, macros, options]
-import intonaco/reactive/primitives/height
+import intonaco/reactive
 import height_ext   # exports `extNode` with a baked {.height: 2.}
 
 # --- harness ----------------------------------------------------------------

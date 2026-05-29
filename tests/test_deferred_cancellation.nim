@@ -8,10 +8,7 @@
 
 import std/unittest
 import proptest
-import intonaco/reactive/primitives/scope
-import intonaco/reactive/primitives/signal
-import intonaco/reactive/primitives/scheduler
-import intonaco/reactive/dsl/binding
+include intonaco/reactive_internal
 
 suite "runAfterPropagation cancellation":
 

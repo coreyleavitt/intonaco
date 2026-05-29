@@ -8,11 +8,9 @@
 ## and (b) the deferred lambda is skipped by the walker.
 
 import std/unittest
-import chronos
-import intonaco/reactive/primitives/scope
-import intonaco/reactive/primitives/signal
-import intonaco/task/core
-import intonaco/task/mount
+include intonaco/reactive_internal
+# task/{core, mount} are part of the substrate include-set; Mount,
+# spawn, mountWhen are already in scope. No separate imports needed.
 
 proc tick(): Future[void] {.async: (raises: [CancelledError]).} =
   await sleepAsync(0.milliseconds)

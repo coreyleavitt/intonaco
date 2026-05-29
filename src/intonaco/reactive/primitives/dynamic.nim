@@ -13,7 +13,6 @@
 ## □-typed value, and a `Dynamic[T]` reference is guaranteed to point
 ## at a ◇-typed value with no height composition.
 
-import ./subscribable
 
 type
   Dynamic*[T] = ref object of Subscribable
@@ -24,7 +23,7 @@ type
       ## absence on field assignment. Reads should go through `.get()`
       ## or the call-operator (see `dsl/dynamic.nim`).
 
-proc newDynamic*[T](initial: T): Dynamic[T] =
+proc newDynamic[T](initial: T): Dynamic[T] =
   ## Substrate-internal constructor. Allocates a `Dynamic[T]` with
   ## `val = initial` and height 0; substrate floor procs (e.g.
   ## `foldedDynamic`) typically overwrite the height to reflect runtime

@@ -8,15 +8,12 @@
 ## Substrate-internal. Consumers use the DSL macros instead. Substrate-
 ## template authors use these via the M-α.3 authoring kit.
 
-import ./subscribable
-import ./scope
-import ./signal
 
 proc maxDepHeight(deps: openArray[Subscribable]): int =
   for d in deps:
     if d.height + 1 > result: result = d.height + 1
 
-proc computedC*[T](deps: openArray[Subscribable],
+proc computedC[T](deps: openArray[Subscribable],
                    body: proc(): T {.closure.},
                    fixedHeight = -1): Signal[T] {.gcsafe.} =
   ## The runtime primitive under the `computed` macro. Height: `fixedHeight`
@@ -43,7 +40,7 @@ proc computedC*[T](deps: openArray[Subscribable],
         unsubscribeAll(captured)
     outSig
 
-proc effectC*(deps: openArray[Subscribable], body: proc() {.closure.},
+proc effectC(deps: openArray[Subscribable], body: proc() {.closure.},
               fixedHeight = -1) {.gcsafe.} =
   ## The runtime primitive under the `effect` macro. Same shape as `computedC`,
   ## side-effect only. See `computedC` for the gcsafe discipline.

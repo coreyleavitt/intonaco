@@ -32,18 +32,9 @@
 ## shape, `readset ⊆ D` is **true by construction** — the dep list IS the
 ## read-set. The implication delivers unconditionally.
 
-{.experimental: "callOperator".}
 
-import std/[macros, options]
-import ../primitives/signal
-import ../primitives/subscribable
-import ../primitives/height
-import ../primitives/computation
-import ./kit                         # the substrate-template authoring kit
 
-export signal      # `Signal[T]`, `signalC(...)`, `signals:`, `peek` — the
                    # user-facing static-tier surface composes on top of these
-export height      # `heightOf` / `composeHeight` / `withHeight` — needed by
                    # the macros' generated code AND by `bakedHeight`'s callers
 
 # --- The macros (built on the kit's orchestrator) ---------------------------

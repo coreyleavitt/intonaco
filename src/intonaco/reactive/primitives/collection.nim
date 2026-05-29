@@ -29,15 +29,7 @@
 ## Unlabeled collections skip journaling (same rule as
 ## `Signal[T].set`).
 
-{.experimental: "callOperator".}
 
-import std/macros
-import ./subscribable
-import ./scheduler
-import ./speculative
-import ./height
-import intonaco/journal/events
-import intonaco/journal/log
 
 type
   DeltaKind* = enum
@@ -69,7 +61,7 @@ type
 
   DeltaHandler*[T] = proc(d: Delta[T]) {.closure.}
 
-  DeltaConsumer*[T] = ref object
+  DeltaConsumer[T] = ref object
     ## A height-scheduled delta sink. `comp` is subscribed to the collection
     ## (so it carries a height and fires through the worklist, NOT eagerly);
     ## `pending` buffers the deltas of the current propagation until `comp`
@@ -239,14 +231,14 @@ proc deliver[T](c: ReactiveCollection[T], d: Delta[T]) =
       dc.pending.add d
   notify(Subscribable(c))
 
-proc pushDelta*[T](c: ReactiveCollection[T], d: Delta[T]) =
+proc pushDelta[T](c: ReactiveCollection[T], d: Delta[T]) =
   ## Apply `d` to `c` AND deliver it to `c`'s consumers — the external driver
   ## for a derived collection (`derive`). No journaling: a derived view mirrors
   ## its source, which journals on its own.
   applyDelta(c, d)
   deliver(c, d)
 
-proc newDynamicReactive*[T](initial: seq[T] = @[], height = 0):
+proc newDynamicReactive[T](initial: seq[T] = @[], height = 0):
     DynamicCollection[T] =
   ## Substrate-internal allocator for `DynamicCollection[T]`. Mirrors
   ## `newReactive` but produces the ◇-modality flavor used by the
@@ -257,7 +249,7 @@ proc newDynamicReactive*[T](initial: seq[T] = @[], height = 0):
   result = DynamicCollection[T](items: initial)
   Subscribable(result).height = height
 
-proc newReactive*[T](initial: seq[T] = @[], height = 0): ReactiveCollection[T] =
+proc newReactive[T](initial: seq[T] = @[], height = 0): ReactiveCollection[T] =
   ## A bare reactive collection seeded with `initial` at the given height — the
   ## substrate for a derived view (`derive`), driven via `pushDelta`.
   result = ReactiveCollection[T](items: initial)

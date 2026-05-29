@@ -24,12 +24,6 @@
 ## means compound conditions get their own named binding. The mount logic
 ## itself rides on the existing `effect [boolSig]: ...` macro from `binding`.
 
-import chronos/contextvars
-import intonaco/reactive/primitives/signal
-import intonaco/reactive/primitives/scope
-import intonaco/reactive/dsl/binding       # effect macro
-import intonaco/reactive/primitives/scheduler     # runAfterPropagation — the decide/act seam
-import ./core
 
 template mountWhen*(boolSig: Signal[bool], body: untyped): untyped =
   ## Mount `body` (which must produce a `Mount`) while `boolSig` is true.

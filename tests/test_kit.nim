@@ -7,13 +7,7 @@
 ## the resulting macro behaves end-to-end like the canonical computed/effect.
 
 import std/[unittest, macros]
-import intonaco/reactive/primitives/signal
-import intonaco/reactive/primitives/scope
-import intonaco/reactive/primitives/subscribable
-import intonaco/reactive/primitives/height
-import intonaco/reactive/primitives/computation
-import intonaco/reactive/dsl/kit
-import intonaco/reactive/dsl/binding   # for bakedHeight introspection
+include intonaco/reactive_internal
 
 # A new substrate template family built entirely from the kit — proves the
 # 7-line definition pattern.

@@ -6,10 +6,7 @@
 {.experimental: "callOperator".}
 
 import std/unittest
-import intonaco/reactive/dsl/dynamic       # Dynamic[T], dynamicComputed, `dynamic` macro
-import intonaco/reactive/primitives/collection    # CollectionSignal, mutation ops, signals:
-import intonaco/reactive/dsl/each          # eachItem
-import intonaco/reactive/dsl/binding       # computed / effect / signals: (re-exported)
+import intonaco/reactive       # Dynamic[T], dynamicComputed, `dynamic` macro
 
 
 suite "C shape dynamic tier — the four shapes":

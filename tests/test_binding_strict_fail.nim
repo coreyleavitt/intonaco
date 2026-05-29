@@ -4,7 +4,7 @@
 
 {.experimental: "callOperator".}
 
-import intonaco/reactive/dsl/binding
+import intonaco/reactive
 
 let raw = signalC(5)            # no {.height.} pragma — not in static fragment
 

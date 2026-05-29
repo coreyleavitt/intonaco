@@ -12,9 +12,6 @@
 ## adopt it under a Supervisor — the supervisor uses the per-slot
 ## `ChildFactory` stored at spawn time to re-spawn.
 
-import chronos
-import results
-import ./core
 
 type
   GroupError* = enum

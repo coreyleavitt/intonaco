@@ -14,7 +14,6 @@
 ## Compile-time discharge along static supervisor paths (DESIGN.md
 ## R14) lands in v3 — see issue #35.
 
-import ./scope
 
 type
   MissingProviderError* = object of CatchableError

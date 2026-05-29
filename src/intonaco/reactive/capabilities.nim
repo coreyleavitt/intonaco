@@ -28,7 +28,10 @@
 ## compile time along statically-known supervisor paths.
 
 import std/[macros, strutils, tables, sets]
-import ./primitives/context
+# `use` (from `primitives/context`) is emitted by the `requires` macro
+# below; the emission is name-based, so the symbol is resolved at the
+# consumer's call site (where they `import intonaco/reactive`), not at
+# this module's compile time. No direct import needed.
 
 type
   FsReadCap*    = ref object   ## read from local filesystem

@@ -11,7 +11,7 @@ import std/[unittest, macros]
 import intonaco/reactive/analysis/pass
 import intonaco/reactive/analysis/diagnostic
 import intonaco/reactive/analysis/passes_core   # registers the three core passes
-import intonaco/reactive/primitives/signal
+import intonaco/reactive
 
 # A custom pass for testing: rejects any int literal whose value is 42.
 proc no42Pass(node: NimNode, ctx: WalkContext): seq[Finding] {.nimcall.} =

@@ -23,15 +23,7 @@
 ## step body lexically precede the body's existing references, letting them
 ## resolve to the local value bindings instead of the outer Signal-typed syms.
 
-{.experimental: "callOperator".}
 
-import std/[macros, options]
-import ../primitives/deltafloor   # deltas / foldDeltas — named by bindSym
-import ../primitives/height
-import ../primitives/subscribable # `Subscribable` — bindSym'd into the homogenization wrapping
-import ../analysis/pass            # runAnalysis
-import ../analysis/passes_core     # registers the three core walker passes
-import ./kit                       # extractDepSyms — the kit's dep-extraction helper
 
 macro scanInner(name: untyped, coll: typed, deps: typed,
                 initial: typed, step: typed,

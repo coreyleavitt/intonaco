@@ -14,12 +14,7 @@
 {.experimental: "callOperator".}
 
 import std/unittest
-import intonaco/reactive/primitives/scope
-import intonaco/reactive/primitives/collection
-import intonaco/reactive/primitives/signal
-import intonaco/reactive/dsl/derive
-import intonaco/reactive/dsl/dynamic   # Dynamic[T] for the fold test
-import intonaco/reactive/primitives/convergence   # CommutativeGroup laws for int
+include intonaco/reactive_internal
 
 # int as a commutative group under addition (sum) — required by `fold`.
 proc merge(a, b: int): int = a + b

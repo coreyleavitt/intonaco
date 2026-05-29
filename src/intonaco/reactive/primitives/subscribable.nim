@@ -83,7 +83,7 @@ type
     ## one height-ordered drain.)
     ckEffect, ckComputed
 
-  Subscribable* = ref object of RootObj
+  Subscribable = ref object of RootObj
     ## Erased base for "anything observable" so a Computation can
     ## hold a heterogeneous list of sources without generic infection.
     ## All reactive primitives in fresco inherit from this.
@@ -93,7 +93,7 @@ type
       ## computed's output signal carries the producing Computation's
       ## height, so dependents compute their own height relative to it.
 
-  Computation* = ref object
+  Computation = ref object
     ## The observer side of the reactive graph. Holds a closure to
     ## re-run on dep change, plus the set of Subscribable sources it
     ## currently observes (for `unsubscribeAll` cleanup).
@@ -186,7 +186,7 @@ var currentComputation* {.threadvar.}: Computation
 
 # --- Subscription ----------------------------------------------------------
 
-proc subscribe*(s: Subscribable, c: Computation) {.gcsafe.} =
+proc subscribe(s: Subscribable, c: Computation) {.gcsafe.} =
   ## Explicit static subscription: wire `c` as an observer of `s`
   ## without going through the runtime `currentComputation` stack.
   ## Used by the typed-macro layer (`tracked:`) to emit compile-time-
@@ -215,7 +215,7 @@ proc trackRead*(s: Subscribable) {.gcsafe.} =
       currentComputation.height = s.height + 1
 
 
-proc unsubscribeAll*(c: Computation) {.gcsafe.} =
+proc unsubscribeAll(c: Computation) {.gcsafe.} =
   ## Detach `c` from every Subscribable it currently observes. Called
   ## by `createEffect` before re-running (to rebuild deps cleanly) and
   ## by the `onCleanup` emitted in `tracked:` blocks. Exported because

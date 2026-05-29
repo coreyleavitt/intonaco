@@ -22,8 +22,7 @@
 ## becomes the red→green target for the height-ordered worklist scheduler.
 
 import std/unittest
-import intonaco/reactive/primitives/signal
-import intonaco/reactive/primitives/runtime
+include intonaco/reactive_internal
 
 suite "consistency spike — diamond glitch-freedom":
 

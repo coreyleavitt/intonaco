@@ -7,8 +7,8 @@
 ## (not `computedC`) and that the binding is wired up correctly.
 
 import std/unittest
-import intonaco/reactive
-import ../examples/extensions/traced_macro
+include intonaco/reactive_internal
+include ../examples/extensions/traced_macro
 
 suite "kit-built substrate template — traced example":
 

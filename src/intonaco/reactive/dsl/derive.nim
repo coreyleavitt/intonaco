@@ -17,13 +17,7 @@
 ## deliberately out of scope — for cross-signal transforms, use a `computed`
 ## (`c.get()` then transform) or apply at the render layer.
 
-{.experimental: "callOperator".}
 
-import std/[macros, options]
-import ../primitives/deltafloor   # mapped / filtered / folded — named by bindSym
-import ../primitives/height
-import ../analysis/pass            # runAnalysis
-import ../analysis/passes_core     # registers the three core walker passes
 
 proc isDynamicCollectionType(ty: NimNode): bool {.compileTime.} =
   ## True iff `ty` is `DynamicCollection[_]` (the ◇-modality collection).

@@ -24,7 +24,6 @@
 ## `await` automatically; writes from sibling coroutines see their own
 ## frame (or none) and don't land on ours.
 
-import chronos/contextvars
 
 type
   SpeculativeScope* = ref object

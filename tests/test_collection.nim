@@ -6,12 +6,7 @@
 ## fresco's test_collection.nim (the delta-emission + speculative core).
 
 import std/unittest
-import intonaco/reactive/primitives/scope
-import intonaco/reactive/primitives/signal
-import intonaco/reactive/primitives/runtime        # createEffect (the floor — tests may use it)
-import intonaco/reactive/primitives/collection
-import intonaco/reactive/primitives/deltafloor      # onDelta (the floor — tests subscribe directly)
-import intonaco/reactive/primitives/speculative
+include intonaco/reactive_internal
 
 suite "CollectionSignal: core delta emission":
 

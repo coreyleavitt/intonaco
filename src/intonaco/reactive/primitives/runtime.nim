@@ -16,12 +16,8 @@
 ## users can name it; importing it is the explicit, greppable "I'm bypassing the
 ## classifier" act.
 
-import ./subscribable
-import ./scope
-import ./signal
-export subscribable   ## callers of `createEffect` need to name `Computation`
 
-proc createEffect*(body: proc() {.closure.}, kind = ckEffect,
+proc createEffect(body: proc() {.closure.}, kind = ckEffect,
                    fixedHeight = -1): Computation {.gcsafe, discardable.} =
   ## Run `body` immediately, tracking reactive reads; re-run on any tracked
   ## change until the enclosing scope is disposed. Returns the Computation
@@ -51,7 +47,7 @@ proc createEffect*(body: proc() {.closure.}, kind = ckEffect,
     comp.run()
     result = comp
 
-proc createComputed*[T](body: proc(): T {.closure.}, fixedHeight = -1): Signal[T]
+proc createComputed[T](body: proc(): T {.closure.}, fixedHeight = -1): Signal[T]
     {.gcsafe.} =
   ## A derived signal that re-evaluates when its dependencies change. Reading
   ## the returned signal both yields the current value and subscribes the

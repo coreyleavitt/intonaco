@@ -34,11 +34,10 @@
 ## See `intonaco/docs/extension-protocol.md` §"Building new DSL macros: the
 ## substrate kit" for the full kit walkthrough.
 
-import std/macros
-import intonaco/reactive/primitives/signal
-import intonaco/reactive/primitives/subscribable
-import intonaco/reactive/primitives/computation
-import intonaco/reactive/dsl/kit
+# This extension is an INCLUDE-FILE, not a standalone module. Consumers
+# include it AFTER `include intonaco/reactive_internal` so types unify
+# within their compilation unit. See `docs/extension-protocol.md` for
+# the substrate-author extension pattern.
 
 # --- The custom runtime primitive -------------------------------------------
 
