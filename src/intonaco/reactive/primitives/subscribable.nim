@@ -83,7 +83,7 @@ type
     ## one height-ordered drain.)
     ckEffect, ckComputed
 
-  Subscribable = ref object of RootObj
+  Subscribable* = ref object of RootObj
     ## Erased base for "anything observable" so a Computation can
     ## hold a heterogeneous list of sources without generic infection.
     ## All reactive primitives in fresco inherit from this.
