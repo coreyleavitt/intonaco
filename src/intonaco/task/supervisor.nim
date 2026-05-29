@@ -6,7 +6,7 @@
 ## pools land in v2.3. Per-exception `onError` policies and state-
 ## restoration on restart land in v2.2.
 ##
-##   let sup = newSupervisor(maxRestarts = 5, within = 10.seconds)
+##   let sup = newSupervisor(maxRestarts = 5, within = chronos.seconds(10))
 ##   sup.addChild("heartbeat", lcPermanent, heartbeatFactory)
 ##   sup.addChild("agent",     lcTransient, agentFactory)
 ##   await spawn sup.run()
@@ -113,7 +113,7 @@ contextVar:
 
 proc newSupervisor*(strategy = ssOneForOne,
                     maxRestarts = 5,
-                    within = 10.seconds): Supervisor =
+                    within = chronos.seconds(10)): Supervisor =
   ## Construct a supervisor. Defaults mirror OTP's typical values:
   ## up to `maxRestarts` (5) restarts within a `within` (10s) sliding
   ## window before the supervisor escalates. `strategy` controls how
@@ -164,7 +164,7 @@ proc trimWindow(times: var seq[Moment], now: Moment, window: chronos.Duration) =
 proc adopt*(s: Supervisor, g: TaskGroup, name: string,
             lifecycle = lcTemporary,
             maxRestarts = 5,
-            within = 10.seconds) =
+            within = chronos.seconds(10)) =
   ## Adopt a TaskGroup as a supervised pool. The supervisor watches
   ## the group's members through its run loop; on member finish it
   ## applies `lifecycle` (lcTemporary: never restart; lcTransient:
