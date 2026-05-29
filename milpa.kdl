@@ -20,6 +20,12 @@ deps {
     // Pinned to the feat/contextvars branch while the upstream PR is in
     // review; milpa locks the resolved SHA in milpa.lock.
     chronos git=(url)"https://github.com/coreyleavitt/chronos.git" ref="feat/contextvars"
+
+    // Property-based testing — used in tests/ to pin invariants over
+    // generated inputs (e.g. "any sequence of cancels still yields a
+    // consistent DeferredHandle state"). Choice-sequence engine; shrinks
+    // through map/filter/flatMap.
+    proptest git=(url)"https://github.com/coreyleavitt/proptest.git" ref="main"
 }
 
 kind "library"
