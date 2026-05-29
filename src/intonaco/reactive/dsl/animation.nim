@@ -269,7 +269,7 @@ proc startFrameClock*(fps: int = DefaultFPS) =
   ## the rate of a running clock, call `stopFrameClock()` first.
   if frameClockTask != nil and not frameClockTask.finished: return
   if frameInterval == default(chronos.Duration):
-    frameInterval = max(1, 1000 div fps).milliseconds
+    frameInterval = chronos.milliseconds(max(1, 1000 div fps))
   frameClockTask = clockLoop()
 
 proc stopFrameClock*() =
