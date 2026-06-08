@@ -20,7 +20,13 @@ deps {
     // Pinned to the feat/contextvars branch while the upstream PR is in
     // review; milpa locks the resolved SHA in milpa.lock.
     chronos git=(url)"https://github.com/coreyleavitt/chronos.git" ref="feat/contextvars"
+}
 
+// Test-only deps. milpa resolves these for intonaco's own build/test, but
+// a transitive dep's dev-deps NEVER enter a downstream graph — so proptest
+// (and its z3/softlink pull) stays out of fresco and anything else that
+// depends on intonaco.
+dev-deps {
     // Property-based testing — used in tests/ to pin invariants over
     // generated inputs (e.g. "any sequence of cancels still yields a
     // consistent DeferredHandle state"). Choice-sequence engine; shrinks
