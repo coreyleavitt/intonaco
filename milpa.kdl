@@ -16,10 +16,14 @@ src_dir "src"
 
 deps {
     // Async runtime: our chronos fork with the contextVar primitive that
-    // currentScope / currentSpeculative / parallelCollector ride on.
-    // Pinned to the feat/contextvars branch while the upstream PR is in
-    // review; milpa locks the resolved SHA in milpa.lock.
-    chronos git=(url)"https://github.com/coreyleavitt/chronos.git" ref="feat/contextvars"
+    // currentScope / currentSpeculative / parallelCollector ride on, merged
+    // with the pendingCallbacksCount() dispatcher-introspection accessor
+    // (fresco's headless-quiescence drain needs both). Pinned to the
+    // fresco-pin integration branch - a merge of feat/contextvars and
+    // feat/pending-callbacks-count, kept as two independent upstream-PR
+    // units on their own branches - while both upstream PRs are in review;
+    // milpa locks the resolved SHA in milpa.lock.
+    chronos git=(url)"https://github.com/coreyleavitt/chronos.git" ref="fresco-pin"
 }
 
 // Test-only deps. milpa resolves these for intonaco's own build/test, but
