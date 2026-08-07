@@ -101,6 +101,13 @@ var frameInterval {.threadvar.}: chronos.Duration
   ## Cross-thread animation would require a shared list + a per-thread
   ## clock — not yet implemented.
 
+proc animationsIdle*(): bool =
+  ## True iff no live tween/spring frame animations are registered.
+  ## Idle-positive polarity (uniform with `reactiveIdle`/`surfaceIdle`);
+  ## deliberately not `animationsPending` — see
+  ## `docs/rfc-headless-quiescence.md` §Vocabulary.
+  frameAnimations.len == 0
+
 proc cancel*(a: Animation) =
   ## Stop the animation. The next frame-clock tick discovers the
   ## `cancelled` flag and removes the entry from the scheduler.

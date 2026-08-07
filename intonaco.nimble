@@ -44,6 +44,7 @@ task test, "run intonaco's standalone tests":
     "tests/test_effect_feedback.nim",
     "tests/test_height.nim",
     "tests/test_scheduler_idle.nim",
+    "tests/test_animation_idle.nim",
     "tests/test_verification.nim",
     "tests/test_convergence.nim",
     "tests/test_collection.nim",
