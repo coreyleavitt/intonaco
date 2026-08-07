@@ -6,7 +6,7 @@
 ## fresco's test_collection.nim (the delta-emission + speculative core).
 
 import std/unittest
-import intonaco/reactive
+include intonaco/reactive_internal
 
 suite "CollectionSignal: core delta emission":
 
