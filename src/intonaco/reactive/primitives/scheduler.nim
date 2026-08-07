@@ -190,6 +190,27 @@ proc drainQueue() {.gcsafe, raises: [].} =
               action()
           except Exception: discard
 
+proc reactivePendingCount*(): int {.gcsafe, raises: [].} =
+  ## Combined depth of the reactive worklist and the deferred-action queue.
+  ## Read-only observability probe (see `fresco/docs/rfc-headless-quiescence.md`
+  ## Design §1) — useful beyond testing, e.g. sinopia builds its own drain
+  ## from this and `reactiveIdle` rather than reusing fresco's headless
+  ## driver.
+  {.cast(gcsafe).}:
+    gQueue.len + gDeferred.len
+
+proc reactiveIdle*(): bool {.gcsafe, raises: [].} =
+  ## True iff no propagation is in flight and both queues are empty.
+  ##
+  ## intonaco propagation is synchronous: `notify` drains `gQueue` and
+  ## `gDeferred` on the writer's stack before returning, so from OUTSIDE
+  ## propagation this is always true once a `.set()` call has returned.
+  ## It is only observably false from INSIDE propagation — an
+  ## effect/computed body (or a `runAfterPropagation` action) fired
+  ## mid-drain, where `gPropagating` is still set.
+  {.cast(gcsafe).}:
+    not gPropagating and gQueue.len == 0 and gDeferred.len == 0
+
 proc notify(s: Subscribable) {.gcsafe, raises: [].} =
   ## Enqueue every Computation observing `s` into the height-ordered worklist;
   ## if no propagation is in flight, drain it.
