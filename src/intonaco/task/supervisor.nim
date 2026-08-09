@@ -102,14 +102,14 @@ type
   SupervisorEscalation* = object of CatchableError
     childName*: string
 
-contextVar:
-  var currentSupervisor: Supervisor = nil
-  ## Chronos contextVar carrying the supervisor that spawned the
-  ## currently-running task. Set by `Supervisor.run()` around each
-  ## child factory call; the chronos dispatcher captures+restores
-  ## across every await automatically. Inside a `{.needs.}`-annotated
-  ## task body, the macro-injected `currentSup()` accessor reads this
-  ## and downcasts to the proc-local synthetic supervisor type.
+let currentSupervisor {.contextVar.}: Supervisor = nil
+  ## Chronos `ContextVar[Supervisor]` key carrying the supervisor that
+  ## spawned the currently-running task. Bound by `Supervisor.run()`
+  ## around each child factory call; the chronos dispatcher
+  ## captures+restores across every await automatically. Inside a
+  ## `{.needs.}`-annotated task body, the macro-injected `currentSup()`
+  ## accessor reads this and downcasts to the proc-local synthetic
+  ## supervisor type.
 
 proc newSupervisor*(strategy = ssOneForOne,
                     maxRestarts = 5,
@@ -209,7 +209,7 @@ proc run*(s: Supervisor) {.async: (raises: [CatchableError]).} =
   # for the duration of the spawned task's lifetime — `currentSup()`
   # inside the task body reads this back.
   for child in s.children:
-    withCurrentSupervisor(s):
+    currentSupervisor.withValue(s):
       child.mount = spawn child.spec.factory()
 
   while s.children.len > 0 or s.hasAdoptedMembers():
@@ -410,7 +410,7 @@ proc run*(s: Supervisor) {.async: (raises: [CatchableError]).} =
         try: target.spec.onRestart(globalJournal, prevTid)
         except Exception: discard   # user-supplied closure
 
-      withCurrentSupervisor(s):
+      currentSupervisor.withValue(s):
         target.mount = spawn target.spec.factory()
 
 # --- Topology introspection ----------------------------------------------

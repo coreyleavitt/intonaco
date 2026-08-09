@@ -26,6 +26,10 @@ proc createEffect(body: proc() {.closure.}, kind = ckEffect,
   ## `fixedHeight >= 0` bakes the height (#53): the Architecture-B macros pass
   ## the compile-time-resolved height so subscribe-time accumulation does not
   ## override it. `-1` (the default / explicit-dynamic path) accumulates.
+  # `.value` read hoisted above the cast block — its own nested
+  # `{.cast(gcsafe).}` would defeat the outer cast for the indirect
+  # `comp.run()` call below.
+  let scopeLive = currentScope.value != nil
   {.cast(gcsafe).}:
     let comp = Computation(kind: kind)
     if fixedHeight >= 0:
@@ -40,7 +44,7 @@ proc createEffect(body: proc() {.closure.}, kind = ckEffect,
         body()
       finally:
         currentComputation = prev
-    if currentScope != nil:
+    if scopeLive:
       onCleanup proc() =
         comp.disposed = true
         unsubscribeAll(comp)

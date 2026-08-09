@@ -98,9 +98,14 @@ proc runAfterPropagation(action: DeferredAction): DeferredHandle
   ## Walker treatment: this proc is `{.forbids: [ReactiveRead, ReactiveWrite].}`
   ## so the walker accepts the call. The closure body is not descended into
   ## (lambda bodies are deferred-execution context).
+  # Read the scope key OUTSIDE the cast block: `.value` carries its own
+  # `{.cast(gcsafe).}`, and nesting cast blocks defeats the outer one for
+  # everything after the expansion (the indirect `action()` call below
+  # stops being excused).
+  let scopeNow = currentScope.value
   {.cast(gcsafe).}:
     let h = DeferredHandle(cancelledFlag: false)
-    if currentScope != nil and not currentScope.disposed:
+    if scopeNow != nil and not scopeNow.disposed:
       # Scope-affine: scope dispose auto-cancels the pending action.
       let cap = h
       onCleanup proc() = cap.cancelledFlag = true

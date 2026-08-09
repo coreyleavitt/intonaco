@@ -307,10 +307,10 @@ proc captureInverse[T](c: CollectionSignal[T], inv: Delta[T]) =
   ## avoids re-registering hooks every mutation. Hooks fire exactly once
   ## per (collection, scope) per scope-exit; subsequent mutations in the
   ## same scope just append.
-  if currentSpeculative != nil and not currentSpeculative.committed:
-    if c.rollbackHead == nil or c.rollbackHead.scope != currentSpeculative:
+  if currentSpeculative.value != nil and not currentSpeculative.value.committed:
+    if c.rollbackHead == nil or c.rollbackHead.scope != currentSpeculative.value:
       let entry = RollbackBufferEntry[T](
-        scope: currentSpeculative,
+        scope: currentSpeculative.value,
         inverses: @[],
         next: c.rollbackHead)
       c.rollbackHead = entry

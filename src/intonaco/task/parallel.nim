@@ -81,7 +81,7 @@ template parallel*(body: untyped): untyped =
     # `await awaitParallel(...)` deliberately runs OUTSIDE this binding
     # — spawns the awaiter machinery might do internally must NOT be
     # joined back into our group.
-    withParallelCollector(collector):
+    parallelCollector.withValue(collector):
       try:
         body
       except CatchableError:

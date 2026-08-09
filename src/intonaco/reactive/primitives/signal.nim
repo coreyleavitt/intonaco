@@ -90,7 +90,7 @@ proc setCore[T](s: Signal[T], newVal: T, journal: bool)
   # Push a revert into the active speculative frame, if any. Captures
   # the prior value by closure so a rollback restores it AND notifies
   # observers so dependent effects re-run.
-  if currentSpeculative != nil and not currentSpeculative.committed:
+  if currentSpeculative.value != nil and not currentSpeculative.value.committed:
     let captured = s
     let prior = s.val
     onSpeculativeRevert proc() =

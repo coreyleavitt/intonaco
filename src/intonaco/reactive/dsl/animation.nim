@@ -308,7 +308,7 @@ proc tween*(s: Signal[float], target: float,
   result = Animation(
     kind: akTween,
     signalId: sid,
-    originScope: currentScope,
+    originScope: currentScope.value,
     target: s,
     startVal: s.peek(),
     endVal: target,
@@ -358,7 +358,7 @@ proc spring*[T](s: Signal[T], target: T,
   let v0 = newSeq[float](n)  # zero-initialized — fresh-start
   for i in 0 ..< n:
     u0[i] = initVals[i] - targetVals[i]
-  let originCap = currentScope
+  let originCap = currentScope.value
   let writeback: SpringWriteback =
     proc(values: seq[float], terminal: bool) {.closure, gcsafe, raises: [].} =
       let packed = fromFloats[T](values)

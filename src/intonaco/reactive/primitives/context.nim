@@ -40,9 +40,9 @@ proc provide*[T: ref](value: T) =
   ## Install `value` in the current scope. No-op outside any scope.
   ## The captured-by-closure reference keeps `value` alive for the
   ## scope's lifetime.
-  if currentScope == nil or currentScope.disposed: return
+  if currentScope.value == nil or currentScope.value.disposed: return
   let captured = value
-  currentScope.providers.add ProviderEntry(
+  currentScope.value.providers.add ProviderEntry(
     typeKey: typeMarker(T),
     fetch: proc(): pointer = cast[pointer](captured))
 
@@ -50,7 +50,7 @@ proc use*[T: ref](_: typedesc[T]): T =
   ## Walk up the scope chain; return the most-recently provided value
   ## of type T. Raises MissingProviderError if no ancestor provides one.
   let key = typeMarker(T)
-  var s = currentScope
+  var s = currentScope.value
   while s != nil:
     for i in countdown(s.providers.high, 0):
       if s.providers[i].typeKey == key:
@@ -62,7 +62,7 @@ proc use*[T: ref](_: typedesc[T]): T =
 proc tryUse*[T: ref](_: typedesc[T]): T =
   ## Same as `use(T)` but returns nil instead of raising.
   let key = typeMarker(T)
-  var s = currentScope
+  var s = currentScope.value
   while s != nil:
     for i in countdown(s.providers.high, 0):
       if s.providers[i].typeKey == key:

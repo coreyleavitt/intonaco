@@ -238,7 +238,7 @@ proc injectGrants(procDef: NimNode, procName: string,
     let supLocal = genSym(nskLet, "supRef")
     let currentSupTemplate = quote do:
       template currentSup(): Option[`procSupSym`] =
-        let `supLocal` = currentSupervisor
+        let `supLocal` = currentSupervisor.value
         if `supLocal` == nil: none(`procSupSym`)
         else: some(cast[`procSupSym`](`supLocal`))
     # Only emit if Supervisor is in scope. Users importing only the

@@ -33,7 +33,7 @@ proc computedC[T](deps: openArray[Subscribable],
       if comp.disposed: return
       outSig.set(body())
     for d in deps: subscribe(d, comp)
-    if currentScope != nil:
+    if currentScope.value != nil:
       let captured = comp
       onCleanup proc() =
         captured.disposed = true
@@ -52,7 +52,7 @@ proc effectC(deps: openArray[Subscribable], body: proc() {.closure.},
       body()
     for d in deps: subscribe(d, comp)
     body()
-    if currentScope != nil:
+    if currentScope.value != nil:
       let captured = comp
       onCleanup proc() =
         captured.disposed = true

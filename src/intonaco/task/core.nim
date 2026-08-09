@@ -136,7 +136,7 @@ template spawn*(call: untyped): Mount =
   ## first await; after the call returns we restore the parent value
   ## and register this Mount with it.
   block:
-    let childScope = newScope(currentScope)
+    let childScope = newScope(currentScope.value)
     childScope.taskId = TaskId.fresh()
     # Direct logTaskSpawned write rather than `journalEvent` — this
     # site must advance lastEventId on BOTH the new childScope (so
@@ -152,19 +152,19 @@ template spawn*(call: untyped): Mount =
     if globalJournal != nil:
       try:
         let parent =
-          if currentScope != nil: currentScope.lastEventId else: NoEvent
+          if currentScope.value != nil: currentScope.value.lastEventId else: NoEvent
         let id = globalJournal.logTaskSpawned(
           childScope.taskId, parent, astToStr(call), "")
         childScope.lastEventId = id
-        if currentScope != nil:
-          currentScope.lastEventId = id
+        if currentScope.value != nil:
+          currentScope.value.lastEventId = id
       except CatchableError: discard
     var fut: Future[void]
     # Child task body must not see parent's parallelCollector — otherwise
     # spawns the child makes internally would leak into the parent's
     # parallel: group. Binding nil for the duration of `call` isolates
     # the child's synchronous startup.
-    withParallelCollector(nil):
+    parallelCollector.withValue(nil):
       withScope(childScope):
         fut = call
     let m = Mount(scope: childScope, future: fut, name: astToStr(call))
@@ -174,7 +174,7 @@ template spawn*(call: untyped): Mount =
     # disposes the scope. If we wired lifecycle first, a same-tick-
     # completing task would be disposed before we got to add it to
     # the collector — silently dropped from the parallel join group.
-    if parallelCollector != nil:
-      parallelCollector.mounts.add m
+    if parallelCollector.value != nil:
+      parallelCollector.value.mounts.add m
     wireLifecycle(m)
     m

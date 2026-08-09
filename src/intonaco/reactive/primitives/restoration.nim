@@ -37,7 +37,7 @@ proc auditRestored(label, repr: string) =
   ## sourceTaskId (the prior task whose write is being replayed).
   ## No-ops outside a scope or when the global journal isn't set.
   if globalJournal == nil: return
-  let cs = currentScope
+  let cs = currentScope.value
   if cs == nil: return
   discard globalJournal.logSignalRestored(
     cs.taskId, cs.lastEventId,

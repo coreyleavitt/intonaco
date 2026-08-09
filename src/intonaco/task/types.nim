@@ -29,10 +29,10 @@ type
     ## the pointer dangling if the surrounding stack frame moves.
     mounts*: seq[Mount]
 
-contextVar:
-  var parallelCollector: MountCollector = nil
-  ## Backed by chronos's continuation-local storage so the binding
-  ## propagates through `await`. Read as `parallelCollector`, bind
-  ## via `withParallelCollector(c): body`. The `parallel:` and
+let parallelCollector {.contextVar.}: MountCollector = nil
+  ## A `ContextVar[MountCollector]` key backed by chronos's
+  ## continuation-local storage so the binding propagates through
+  ## `await`. Read as `parallelCollector.value`, bind via
+  ## `parallelCollector.withValue(c): body`. The `parallel:` and
   ## `spawn` templates handle this internally; user code doesn't
   ## interact with it directly.

@@ -45,8 +45,7 @@ type
       ## scope (so an outer rollback still undoes inner-committed work).
     committed*: bool
 
-contextVar:
-  var currentSpeculative: SpeculativeScope = nil
+let currentSpeculative {.contextVar.}: SpeculativeScope = nil
 
 # --- Speculative extension surface ----------------------------------------
 ##
@@ -69,8 +68,8 @@ proc onSpeculativeRevert*(p: proc() {.closure.}) {.gcsafe.} =
   ## Reference impl: `signal.setCore` — captures the prior value by
   ## closure, sets back + notifies on revert.
   {.cast(gcsafe).}:
-    if currentSpeculative != nil and not currentSpeculative.committed:
-      currentSpeculative.reverts.add p
+    if currentSpeculative.value != nil and not currentSpeculative.value.committed:
+      currentSpeculative.value.reverts.add p
 
 proc onSpeculativeRollback*(p: proc() {.closure.}) {.gcsafe.} =
   ## Register a hook that fires ONCE per scope-exit on rollback, after
@@ -87,8 +86,8 @@ proc onSpeculativeRollback*(p: proc() {.closure.}) {.gcsafe.} =
   ## deltas to a per-scope buffer; the hook applies them in reverse
   ## and emits one batched `dkRollback` delta.
   {.cast(gcsafe).}:
-    if currentSpeculative != nil and not currentSpeculative.committed:
-      currentSpeculative.onRollbackHooks.add p
+    if currentSpeculative.value != nil and not currentSpeculative.value.committed:
+      currentSpeculative.value.onRollbackHooks.add p
 
 proc onSpeculativeCommit*(p: proc() {.closure.}) {.gcsafe.} =
   ## Register a hook that fires ONCE per scope-exit on commit. Use
@@ -99,8 +98,8 @@ proc onSpeculativeCommit*(p: proc() {.closure.}) {.gcsafe.} =
   ## Reference impl: `collection.captureInverse` — promotes the inner
   ## scope's inverse buffer into the parent entry on commit.
   {.cast(gcsafe).}:
-    if currentSpeculative != nil and not currentSpeculative.committed:
-      currentSpeculative.onCommitHooks.add p
+    if currentSpeculative.value != nil and not currentSpeculative.value.committed:
+      currentSpeculative.value.onCommitHooks.add p
 
 proc rollback*(scope: SpeculativeScope) {.gcsafe.} =
   ## Run all queued reverts in reverse order. Reverts trigger observer
@@ -142,7 +141,7 @@ template speculative*(body: untyped): SpeculativeScope =
   ## the body, call `commit()` to make the writes stick; otherwise
   ## the frame auto-rolls back on exit.
   block:
-    let prevSpec = currentSpeculative      # snapshot for `frame.parent`
+    let prevSpec = currentSpeculative.value      # snapshot for `frame.parent`
     let frame = SpeculativeScope(parent: prevSpec)
     template commit() {.inject, used.} =
       ## End the speculative transaction: writes become canonical.
@@ -177,13 +176,13 @@ template speculative*(body: untyped): SpeculativeScope =
       frame.committed = true
       frame.reverts.setLen(0)
       frame.onRollbackHooks.setLen(0)   # no rollback after commit
-    # Binding restore + rollback ordering: `withCurrentSpeculative`
+    # Binding restore + rollback ordering: `currentSpeculative.withValue`
     # owns the contextVar's save/restore in its own try/finally; we
     # only need an inner try/finally to ensure rollback fires before
     # the binding is unwound. If rollback raises a Defect, it
     # propagates through both finallys; the contextVar still restores
     # the prior binding so we never leak a pointer at a dead frame.
-    withCurrentSpeculative(frame):
+    currentSpeculative.withValue(frame):
       try:
         body
       finally:

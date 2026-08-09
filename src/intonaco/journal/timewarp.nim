@@ -39,7 +39,7 @@ proc registerApplier*(label: string, applier: SignalApplier) =
   ## Module-internal — `bindForTimeWarp` is the user-facing entry.
   if label.len == 0: return
   signalAppliersByLabel[label] = applier
-  if currentScope != nil:
+  if currentScope.value != nil:
     let cleanupLabel = label
     onCleanup proc() =
       if cleanupLabel in signalAppliersByLabel:

@@ -20,11 +20,11 @@ template journalEvent*(body: untyped) =
   ## call).
   if globalJournal != nil:
     let jrnl {.inject.} = globalJournal
-    let taskTid {.inject.} = if currentScope != nil: currentScope.taskId else: RootTask
-    let parentEvt {.inject.} = if currentScope != nil: currentScope.lastEventId else: NoEvent
+    let taskTid {.inject.} = if currentScope.value != nil: currentScope.value.taskId else: RootTask
+    let parentEvt {.inject.} = if currentScope.value != nil: currentScope.value.lastEventId else: NoEvent
     try:
       let frescoEvtId = body
-      if currentScope != nil: currentScope.lastEventId = frescoEvtId
+      if currentScope.value != nil: currentScope.value.lastEventId = frescoEvtId
     except CatchableError: discard
 
 template journalEventOnScope*(scope: Scope, body: untyped) =

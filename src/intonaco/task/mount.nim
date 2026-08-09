@@ -47,7 +47,7 @@ template mountWhen*(boolSig: Signal[bool], body: untyped): untyped =
   ## it inside the deferred closure so `spawn`s inside `body` parent to the
   ## right place and journal events attribute to the right task.
   let mountWhenCtx = currentContext()
-  let mountWhenScope = currentScope
+  let mountWhenScope = currentScope.value
   var currentMount: Mount = nil
   effect [boolSig]:
     let should = boolSig         # decide: pure bool snapshot
