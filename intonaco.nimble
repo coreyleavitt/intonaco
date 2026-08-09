@@ -50,6 +50,16 @@ task test, "run intonaco's standalone tests":
     "tests/test_collection.nim",
     "tests/test_derive.nim",
     "tests/test_scan.nim",
+    # Pre-split substrate tests absorbed from fresco's suite (they
+    # exercise intonaco-only features; ported to the first-class
+    # contextvar key API on arrival).
+    "tests/test_reactive_legacy.nim",
+    "tests/test_speculative.nim",
+    "tests/test_speculative_reentrancy.nim",
+    "tests/test_parallel.nim",
+    "tests/test_supervisor_restart.nim",
+    "tests/test_grant_inject.nim",
+    "tests/test_context_isolation.nim",
   ]
   for t in tests:
     exec "nim r --hints:off --warnings:off --path:src " & t
