@@ -60,6 +60,7 @@ task test, "run intonaco's standalone tests":
     "tests/test_supervisor_restart.nim",
     "tests/test_grant_inject.nim",
     "tests/test_context_isolation.nim",
+    "tests/test_mailbox_cancel_safety.nim",
   ]
   for t in tests:
     exec "nim r --hints:off --warnings:off --path:src " & t

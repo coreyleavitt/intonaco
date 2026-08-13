@@ -62,13 +62,24 @@ proc nextEvent*[T](m: Mailbox[T]): Future[T] {.async.} =
   ## Block until the next event is available. Raises
   ## `MailboxClosedError` if `close` is called while waiting.
   ##
-  ## **Cancel-safe**: if a `CancelledError` arrives AFTER the queue
-  ## already dequeued a value (the race that bit amoxtli — multi-
-  ## source receive cancelling a losing source's nextEvent in
-  ## `finally:`), the dequeued value is pushed back to the front of
-  ## the queue so the next `nextEvent` retrieves it instead of
-  ## losing it. Without this, the multi-source receive macro would
-  ## silently drop events queued in a non-winning source.
+  ## **Cancel-safe** in both cancel windows a multi-source `receive:`
+  ## opens when it cancels a *losing* source's `nextEvent` (the race
+  ## that bit amoxtli):
+  ##
+  ## 1. Cancel arrives while the mailbox was EMPTY (`getFut` unfinished).
+  ##    `nextEvent` awaits `race(getFut, closing)`, and chronos `race()`
+  ##    does NOT cancel its children — so cancelling the outer future
+  ##    leaves `getFut` (a raw `AsyncQueue` getter) parked on the queue's
+  ##    FIFO waiter list. `AsyncQueue.wakeupNext` serves getters FIFO and
+  ##    skips only *finished* waiters, so the next `push` would wake this
+  ##    ABANDONED getter (its continuation already dead) instead of a live,
+  ##    re-parked one, silently dropping the event; accumulated dead
+  ##    getters also surface later as a stray `CancelledError` at an
+  ##    unrelated `waitFor`. We cancel `getFut` so it is finished and
+  ##    `wakeupNext` skips it.
+  ## 2. Cancel arrives AFTER the getter already dequeued a value
+  ##    (`getFut.completed`). The value is re-queued so the next
+  ##    `nextEvent` retrieves it instead of losing it.
   if m.closed:
     raise newException(MailboxClosedError, "mailbox is closed")
   let getFut = m.queue.get()
@@ -79,11 +90,14 @@ proc nextEvent*[T](m: Mailbox[T]): Future[T] {.async.} =
       raise newException(MailboxClosedError, "mailbox closed mid-wait")
     return getFut.read
   except CancelledError:
-    # Re-queue any value the get already extracted. AsyncQueue
-    # doesn't expose put-at-head; putNoWait at tail is the closest
-    # FIFO-preserving option for the common case of "no other
-    # producer raced in during the cancel window."
-    if getFut.finished and not getFut.failed:
+    if not getFut.finished:
+      # Window 1 (see doc): remove the dangling getter from the queue so
+      # a later push can't wake it FIFO-ahead of a live waiter.
+      await getFut.cancelAndWait()
+    if getFut.completed:
+      # Window 2: hand back the dequeued value. AsyncQueue doesn't expose
+      # put-at-head; putNoWait at tail is the closest FIFO-preserving
+      # option for the common "no concurrent push in the cancel window".
       try: m.queue.putNoWait(getFut.read)
       except AsyncQueueFullError: discard
     raise
